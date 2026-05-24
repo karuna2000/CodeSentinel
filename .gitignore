@@ -1,0 +1,10 @@
+.DS_STORE
+.agents
+.antigravityignore
+.next
+agentreview-chat.html
+node_modules
+.env
+.env.local
+.end.development
+.end.production

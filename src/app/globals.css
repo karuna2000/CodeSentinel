@@ -1,0 +1,91 @@
+@import "tailwindcss";
+
+:root {
+  --bg:        #f5f0e8;
+  --surface:   #faf7f2;
+  --card:      #ffffff;
+  --border:    #e0d8cc;
+  --border2:   #c8bfb0;
+  --text:      #1a1612;
+  --muted:     #8a7f72;
+  --accent:    #c8440a;
+  --accent2:   #1a6b3c;
+  --warn:      #c87a0a;
+  --info:      #1a4a8a;
+  --danger:    #c8440a;
+  --hl-line:   #fff3cd;
+  --hl-border: #e6a817;
+  --ai-bubble: #ffffff;
+  --user-bubble:#1a1612;
+  --font-body: 'Lora', serif;
+  --font-hd:   'Playfair Display', serif;
+  --font-code: 'JetBrains Mono', monospace;
+  --r:         10px;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-card: var(--card);
+  --color-border: var(--border);
+  --color-border2: var(--border2);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent2: var(--accent2);
+  --color-warn: var(--warn);
+  --color-info: var(--info);
+  --color-danger: var(--danger);
+  --color-hl-line: var(--hl-line);
+  --color-hl-border: var(--hl-border);
+  --color-ai-bubble: var(--ai-bubble);
+  --color-user-bubble: var(--user-bubble);
+  
+  --font-body: var(--font-body);
+  --font-hd: var(--font-hd);
+  --font-code: var(--font-code);
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+
+@layer utilities {
+  .typing span {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--border2);
+    animation: typingBounce .9s infinite;
+  }
+  .typing span:nth-child(2) { animation-delay: .15s; }
+  .typing span:nth-child(3) { animation-delay: .3s; }
+  
+  @keyframes typingBounce {
+    0%,60%,100% { transform: translateY(0); background: var(--border2); }
+    30% { transform: translateY(-5px); background: var(--muted); }
+  }
+
+  @keyframes blink { 
+    0%,100%{opacity:1} 50%{opacity:.3} 
+  }
+  
+  @keyframes msgIn { 
+    from{opacity:0;transform:translateY(10px)} 
+    to{opacity:1;transform:translateY(0)} 
+  }
+
+  @keyframes cpPulse {
+    0%, 100% { background: var(--hl-line); }
+    40% { background: #ffdf80; }
+  }
+}
