@@ -58,7 +58,7 @@ export default function Page() {
   const [isCodePanelOpen, setIsCodePanelOpen] = useState(false);
   const [activeLine, setActiveLine] = useState<number | null>(null);
 
-  const startChat = () => {
+  const startChat = (file?: File) => {
     if (chatStarted) return;
     setChatStarted(true);
     
