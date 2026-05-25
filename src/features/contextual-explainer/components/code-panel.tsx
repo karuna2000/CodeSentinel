@@ -28,7 +28,7 @@ const pinColors = {
   low: "bg-[#aaa]",
 };
 
-export function CodePanel({
+export const CodePanel = React.memo(function CodePanel({
   isOpen,
   onClose,
   filename,
@@ -48,6 +48,11 @@ export function CodePanel({
       }
     }
   }, [activeLine, isOpen]);
+
+  // Truncate to 1000 lines to prevent DOM freeze
+  const MAX_LINES = 1000;
+  const isTruncated = codeLines.length > MAX_LINES;
+  const renderedLines = isTruncated ? codeLines.slice(0, MAX_LINES) : codeLines;
 
   return (
     <div
@@ -85,7 +90,7 @@ export function CodePanel({
 
       <div ref={codeWrapRef} className="flex-1 overflow-y-auto overflow-x-hidden w-[380px]">
         <div className="py-[10px] font-code text-[11px] leading-[1.75]">
-          {codeLines.map((line) => {
+          {renderedLines.map((line) => {
             const pin = pins[line.num];
             const isActive = activeLine === line.num;
 
@@ -118,8 +123,13 @@ export function CodePanel({
               </div>
             );
           })}
+          {isTruncated && (
+            <div className="px-[14px] py-[8px] mt-[4px] bg-[rgba(200,68,10,0.05)] text-[var(--muted)] border-t border-[rgba(200,68,10,0.1)] italic text-[10px]">
+              ... {codeLines.length - MAX_LINES} remaining lines truncated for performance.
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
-}
+});

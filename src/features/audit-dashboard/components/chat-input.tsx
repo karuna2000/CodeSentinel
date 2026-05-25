@@ -4,9 +4,11 @@ import { validateFileSize, validateFileType, validatePasteContent } from "@/lib/
 interface ChatInputProps {
   onSend: (message: string) => void;
   onQuickSend: (message: string) => void;
+  /** Called when a valid file is attached — passes the real File object */
+  onFileUpload?: (file: File) => void;
 }
 
-export function ChatInput({ onSend, onQuickSend }: ChatInputProps) {
+export function ChatInput({ onSend, onQuickSend, onFileUpload }: ChatInputProps) {
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -71,7 +73,12 @@ export function ChatInput({ onSend, onQuickSend }: ChatInputProps) {
     }
 
     setError(null);
-    onQuickSend(`Attached file: ${file.name}`);
+    // Forward the real File to the parent pipeline
+    if (onFileUpload) {
+      onFileUpload(file);
+    } else {
+      onQuickSend(`Attached file: ${file.name}`);
+    }
   };
 
   return (

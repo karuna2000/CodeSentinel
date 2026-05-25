@@ -1,3 +1,5 @@
+import { SkeletonAppShell } from "@/features/audit-dashboard/components/skeleton-app-shell";
+
 export default function Loading() {
-  return <div>Loading...</div>
+  return <SkeletonAppShell />;
 }
