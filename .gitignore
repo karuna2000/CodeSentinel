@@ -9,5 +9,5 @@ node_modules
 .end.development
 .end.production
 .env.example
-features
+/features
 test-screenshot.mjs
