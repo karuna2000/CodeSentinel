@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { Playfair_Display, JetBrains_Mono, Lora } from "next/font/google";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { Providers } from "./providers";
 import "./globals.css";
 
 const playfair = Playfair_Display({ subsets: ["latin"], weight: ["700", "900"], variable: '--font-hd' });
@@ -11,15 +14,20 @@ export const metadata: Metadata = {
   description: "Secure Code Review Agent platform",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Pass the session to Providers so the client boundary doesn't need an extra round-trip
+  const session = await getServerSession(authOptions);
+
   return (
     <html lang="en">
       <body className={`${playfair.variable} ${jetbrains.variable} ${lora.variable} antialiased`}>
-        {children}
+        <Providers session={session}>
+          {children}
+        </Providers>
       </body>
     </html>
   );

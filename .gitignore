@@ -8,3 +8,6 @@ node_modules
 .env.local
 .end.development
 .end.production
+.env.example
+features
+test-screenshot.mjs
