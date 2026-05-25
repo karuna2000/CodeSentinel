@@ -7,7 +7,7 @@ interface TimelineNodeProps {
   isTyping?: boolean;
 }
 
-export function TimelineNode({ role, content, timestamp, isTyping }: TimelineNodeProps) {
+export const TimelineNode = React.memo(function TimelineNode({ role, content, timestamp, isTyping }: TimelineNodeProps) {
   const isUser = role === "user";
 
   return (
@@ -44,4 +44,4 @@ export function TimelineNode({ role, content, timestamp, isTyping }: TimelineNod
       </div>
     </div>
   );
-}
+});

@@ -22,7 +22,7 @@ const severityColors: Record<string, string> = {
   l: "bg-[#888]",
 };
 
-export function IssueSidebar() {
+export const IssueSidebar = React.memo(function IssueSidebar() {
   const [activeCategory, setActiveCategory] = React.useState<string | null>(null);
 
   const filteredIssues = activeCategory
@@ -95,7 +95,7 @@ export function IssueSidebar() {
       </div>
     </aside>
   );
-}
+});
 
 interface CategoryRowProps {
   icon: string;

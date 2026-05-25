@@ -1,5 +1,8 @@
 'use client'
 
+import React from "react";
+import { ErrorState } from "@/components/ui/error-state";
+
 export default function Error({
   error,
   reset,
@@ -8,9 +11,12 @@ export default function Error({
   reset: () => void
 }) {
   return (
-    <div>
-      <h2>Something went wrong!</h2>
-      <button onClick={() => reset()}>Try again</button>
+    <div className="flex h-screen w-full items-center justify-center bg-[var(--bg)] text-[var(--text)]">
+      <ErrorState 
+        title="Application Error"
+        message={error.message || "An unexpected error occurred in the application shell."}
+        onRetry={() => reset()}
+      />
     </div>
   )
 }

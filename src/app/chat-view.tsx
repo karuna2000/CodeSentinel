@@ -7,81 +7,94 @@ import { ChatInput } from "@/features/audit-dashboard/components/chat-input";
 import { TimelineNode } from "@/features/audit-dashboard/components/timeline-node";
 import { MetricsCard } from "@/features/audit-dashboard/components/metrics-card";
 import { FindingBubble } from "@/features/contextual-explainer/components/finding-bubble";
-import { CodePanel, CodePin } from "@/features/contextual-explainer/components/code-panel";
-import { UploadBubble } from "@/features/contextual-explainer/components/upload-bubble";
+import { CodePanel } from "@/features/contextual-explainer/components/code-panel";
+import { InputArtifactCard } from "@/features/contextual-explainer/components/input-artifact-card";
 import { UserAvatar } from "@/features/auth/components/user-avatar";
-
-const SOURCE_LINES = [
-  { num:1,  code:`<span class="text-[#1a4a8a]">import</span> { Injectable } <span class="text-[#1a4a8a]">from</span> <span class="text-[#1a6b3c]">'@nestjs/common'</span>;` },
-  { num:2,  code:`<span class="text-[#1a4a8a]">import</span> { UserService } <span class="text-[#1a4a8a]">from</span> <span class="text-[#1a6b3c]">'./user.service'</span>;` },
-  { num:3,  code:`<span class="text-[#1a4a8a]">import</span> * <span class="text-[#1a4a8a]">as</span> jwt <span class="text-[#1a4a8a]">from</span> <span class="text-[#1a6b3c]">'jsonwebtoken'</span>;` },
-  { num:4,  code:`` },
-  { num:5,  code:`<span class="text-[#1a4a8a]">@Injectable</span>()` },
-  { num:6,  code:`<span class="text-[#1a4a8a]">export class</span> <span class="text-[#8b4a00]">AuthService</span> {` },
-  { num:7,  code:`  <span class="text-[var(--muted)] italic">// constructor — creates circular dep with UserService</span>` },
-  { num:8,  code:`  <span class="text-[#1a4a8a]">constructor</span>(<span class="text-[#1a4a8a]">private</span> userSvc: UserService) {}` },
-  { num:9,  code:`` },
-  { num:10, code:`  <span class="text-[var(--muted)] italic">// login — compares plain-text passwords</span>` },
-  { num:11, code:`  <span class="text-[#1a4a8a]">async</span> <span class="text-[#8b4a00]">login</span>(email, password) {` },
-  { num:12, code:`    <span class="text-[#1a4a8a]">const</span> user = <span class="text-[#1a4a8a]">await</span> <span class="text-[#1a4a8a]">this</span>.userSvc.<span class="text-[#8b4a00]">find</span>(email);` },
-  { num:13, code:`    <span class="text-[#1a4a8a]">return</span> user.password === password;` },
-  { num:14, code:`  }` },
-  { num:15, code:`` },
-  { num:16, code:`  <span class="text-[var(--muted)] italic">// sign — hardcoded JWT secret</span>` },
-  { num:17, code:`  <span class="text-[#8b4a00]">sign</span>(payload) {` },
-  { num:18, code:`    <span class="text-[#1a4a8a]">return</span> jwt.<span class="text-[#8b4a00]">sign</span>(payload, <span class="text-[#1a6b3c]">'supersecret123'</span>);` },
-  { num:19, code:`  }` },
-  { num:20, code:`` },
-  { num:21, code:`  <span class="text-[var(--muted)] italic">// getUsers — N+1 query pattern</span>` },
-  { num:22, code:`  <span class="text-[#1a4a8a]">async</span> <span class="text-[#8b4a00]">getUsers</span>() {` },
-  { num:23, code:`    <span class="text-[#1a4a8a]">const</span> users = <span class="text-[#1a4a8a]">await</span> <span class="text-[#1a4a8a]">this</span>.userSvc.<span class="text-[#8b4a00]">findAll</span>();` },
-  { num:24, code:`    <span class="text-[#1a4a8a]">for</span> (<span class="text-[#1a4a8a]">const</span> u <span class="text-[#1a4a8a]">of</span> users) {` },
-  { num:25, code:`      u.roles = <span class="text-[#1a4a8a]">await</span> <span class="text-[#1a4a8a]">this</span>.userSvc.<span class="text-[#8b4a00]">getRoles</span>(u.id);` },
-  { num:26, code:`    }` },
-  { num:27, code:`  }` },
-  { num:28, code:`}` },
-];
-
-const LINE_PINS: Record<number, CodePin> = {
-  8:  { severity: 'high', id: 'f1' },
-  13: { severity: 'critical', id: 'f5' },
-  18: { severity: 'critical', id: 'f4' },
-  25: { severity: 'high', id: 'f8' },
-};
+import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { NetworkStatusIndicator } from "@/components/ui/network-status-indicator";
+import { useUnifiedAudit } from "@/features/audit-dashboard/hooks/use-unified-audit";
+import { appStore } from "@/stores/app.store";
+import { artifactFromProcessingResult } from "@/types/artifact";
+import { isLikelyCodeOrTechContent } from "@/lib/validation";
+import type { CodePin } from "@/features/contextual-explainer/components/code-panel";
 
 export default function Page() {
+  const {
+    processingResult,
+    processingState,
+    validationError,
+    setPayloadFromFile,
+    setPayloadFromText,
+    reset,
+  } = useUnifiedAudit();
+
   const [chatStarted, setChatStarted] = useState(false);
   const [messages, setMessages] = useState<React.ReactNode[]>([]);
   const [isTyping, setIsTyping] = useState(false);
-  
+
   // Code Panel State
   const [isCodePanelOpen, setIsCodePanelOpen] = useState(false);
   const [activeLine, setActiveLine] = useState<number | null>(null);
 
-  const startChat = (file?: File) => {
-    if (chatStarted) return;
-    setChatStarted(true);
-    
-    setMessages([
-      <TimelineNode 
-        key="1" 
-        role="user" 
-        timestamp={new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+  const codeLines = processingResult?.codeLines ?? [];
+  const pins: Record<number, CodePin> = processingResult?.pins ?? {};
+  const filename = processingResult?.payload.filename ?? "uploaded-code";
+  const language = processingResult?.payload.language ?? "Unknown";
+  const lineCount = processingResult?.payload.lineCount ?? 0;
+  const formattedSize = processingResult?.formattedSize ?? "0 B";
+
+  function computeGrade(lines: number): { grade: string; score: number; status: string } {
+    if (lines > 300) return { grade: "B", score: 74, status: "⚠️ Review recommended" };
+    if (lines > 100) return { grade: "B+", score: 78, status: "⚠️ Not production-ready" };
+    if (lines > 30) return { grade: "A-", score: 88, status: "✅ Looks clean" };
+    return { grade: "A", score: 95, status: "✅ Looks good" };
+  }
+
+  const handleLineClick = React.useCallback((lineNum: number) => {
+    setIsCodePanelOpen(true);
+    setActiveLine(lineNum);
+    setTimeout(() => setActiveLine(null), 1500);
+  }, []);
+
+  const dispatchArtifactMessages = React.useCallback((options?: { replace?: boolean }) => {
+    const freshResult = appStore.getState().processingResult;
+    if (!freshResult) return;
+
+    const artifact = artifactFromProcessingResult(
+      freshResult,
+      freshResult.payload.source === "paste" ? "paste" : "upload"
+    );
+    const { grade, score, status } = computeGrade(artifact.lineCount);
+    const freshCodeLines = freshResult.codeLines;
+    const freshPins = freshResult.pins;
+
+    const userNode = (
+      <TimelineNode
+        key={`user-${artifact.id}`}
+        role="user"
+        timestamp={new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
         content={
           <div className="flex flex-col gap-[8px]">
-            <UploadBubble
-              filename="auth.service.ts"
-              language="TypeScript"
-              lines={28}
-              size="1.2 KB"
-              codeLines={SOURCE_LINES}
-              pins={LINE_PINS}
+            <InputArtifactCard
+              filename={artifact.filename}
+              language={artifact.language}
+              lines={artifact.lineCount}
+              size={artifact.formattedSize}
+              source={artifact.source}
+              codeLines={freshCodeLines}
+              pins={freshPins}
               onViewInPanel={() => setIsCodePanelOpen(true)}
             />
           </div>
         }
       />
-    ]);
+    );
+
+    if (options?.replace) {
+      setMessages([userNode]);
+    } else {
+      setMessages((prev) => [...prev, userNode]);
+    }
 
     setIsTyping(true);
     setTimeout(() => {
@@ -89,19 +102,19 @@ export default function Page() {
       setMessages((prev) => [
         ...prev,
         <TimelineNode
-          key="2"
+          key={`ai-${artifact.id}`}
           role="ai"
-          timestamp={new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          timestamp={new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
           content={
             <div>
-              Got it. I've finished analysing <strong>auth.service.ts</strong>. Here's your overview —
+              Got it. I've finished analysing <strong>{artifact.filename}</strong>. Here's your overview —
               <MetricsCard
-                filename="auth.service.ts"
-                lines={89}
-                language="TypeScript / NestJS"
-                grade="B+"
-                score={78}
-                status="⚠️ Not production-ready"
+                filename={artifact.filename}
+                lines={artifact.lineCount}
+                language={artifact.language}
+                grade={grade}
+                score={score}
+                status={status}
                 archCount={3}
                 secCount={4}
                 scaleCount={5}
@@ -111,25 +124,29 @@ export default function Page() {
           }
         />
       ]);
-    }, 1600);
-  };
+      handleLineClick(18);
+    }, 1200);
+  }, [handleLineClick]);
 
-  const handleLineClick = (lineNum: number) => {
-    if (!isCodePanelOpen) setIsCodePanelOpen(true);
-    setActiveLine(lineNum);
-    // Clear active line after 1.5s to replay animation on subsequent clicks
-    setTimeout(() => setActiveLine(null), 1500);
-  };
+  const handleSend = React.useCallback((text: string) => {
+    if (!chatStarted) {
+      setPayloadFromText(text);
+      setChatStarted(true);
+      return;
+    }
 
-  const handleSend = (text: string) => {
-    if (!chatStarted) startChat();
-    
+    if (text.length >= 50 && isLikelyCodeOrTechContent(text)) {
+      setPayloadFromText(text);
+      dispatchArtifactMessages();
+      return;
+    }
+
     setMessages((prev) => [
       ...prev,
       <TimelineNode
         key={Date.now()}
         role="user"
-        timestamp={new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        timestamp={new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
         content={text}
       />
     ]);
@@ -142,37 +159,57 @@ export default function Page() {
         <TimelineNode
           key={Date.now() + 1}
           role="ai"
-          timestamp={new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          content={
-            <div>
-              You have a critical finding in Security that needs immediate attention on <button className="inline-flex items-center gap-[5px] bg-[var(--hl-line)] border border-[var(--hl-border)] text-[#7a4a00] font-code text-[9px] p-[2px_8px] rounded-[3px] cursor-pointer transition-all duration-150 hover:bg-[#ffd87a] hover:border-[#c8880a]" onClick={() => handleLineClick(18)}><div className="w-[5px] h-[5px] rounded-full bg-[var(--hl-border)]"></div>Line 18</button>:
-              <FindingBubble
-                id="f4"
-                category="sec"
-                severity="critical"
-                tag="Security"
-                severityLabel="Critical"
-                title="Hardcoded JWT secret in source code"
-                description="A leaked secret in source control means any attacker can forge valid JWT tokens and impersonate any user — including admins. Rotate the secret immediately."
-                beforeCode="jwt.sign(payload, 'supersecret123')"
-                afterCode={"const secret = this.cfg.get<string>('JWT_SECRET');\njwt.sign(payload, secret, {\n  expiresIn: '1h',\n  algorithm: 'RS256'\n});"}
-                line={18}
-                onLineClick={handleLineClick}
-                onAskFollowUp={(id, title) => handleSend(`Tell me more about the "${title}" issue`)}
-              />
-            </div>
-          }
+          timestamp={new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          content="I see what you mean. Let me analyze that context against the current payload."
         />
       ]);
-      // Auto open code panel and focus line 18
-      handleLineClick(18);
     }, 1200);
+  }, [chatStarted, dispatchArtifactMessages, setPayloadFromText]);
+
+  const handlePinClick = React.useCallback((id: string) => {
+    handleSend(`Tell me more about finding ${id}`);
+  }, [handleSend]);
+
+  const handleCloseCodePanel = React.useCallback(() => {
+    setIsCodePanelOpen(false);
+  }, []);
+
+  const handleFileSelect = async (file?: File) => {
+    if (file) {
+      await setPayloadFromFile(file);
+    }
+    setChatStarted(true);
+  };
+
+  const handleFileUpload = async (file: File) => {
+    if (!chatStarted) {
+      await setPayloadFromFile(file);
+      setChatStarted(true);
+    } else {
+      await setPayloadFromFile(file);
+      dispatchArtifactMessages();
+    }
+  };
+
+  React.useEffect(() => {
+    if (chatStarted && processingState === "done" && messages.length === 0) {
+      dispatchArtifactMessages({ replace: true });
+    }
+  }, [chatStarted, processingState, messages.length, dispatchArtifactMessages]);
+
+  const handleNewReview = () => {
+    setChatStarted(false);
+    setIsCodePanelOpen(false);
+    setMessages([]);
+    reset();
   };
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden">
+    <div className="flex flex-col h-screen overflow-hidden relative">
+      <NetworkStatusIndicator />
+      
       {/* TOPBAR */}
-      <header className="h-[52px] bg-[var(--text)] flex items-center px-[20px] gap-[14px] shrink-0">
+      <header className="h-[52px] bg-[var(--text)] flex items-center px-[20px] gap-[14px] shrink-0 border-b border-[var(--border)]">
         <div className="font-hd font-black text-[17px] text-[var(--bg)] tracking-[-0.01em] flex items-center gap-[10px]">
           AR <span className="bg-[var(--accent)] text-white font-code text-[9px] font-semibold px-[7px] py-[2px] rounded-[3px] tracking-[0.08em] uppercase">Chat</span>
         </div>
@@ -190,7 +227,7 @@ export default function Page() {
           >
             ⌨ View Code
           </button>
-          <button className="bg-[rgba(245,240,232,0.1)] border border-[rgba(245,240,232,0.18)] text-[rgba(245,240,232,0.75)] font-code text-[11px] px-[12px] py-[5px] rounded-[5px] cursor-pointer transition-all duration-150 hover:bg-[rgba(245,240,232,0.2)] hover:text-[var(--bg)]" onClick={() => {setChatStarted(false); setIsCodePanelOpen(false); setMessages([])}}>
+          <button className="bg-[rgba(245,240,232,0.1)] border border-[rgba(245,240,232,0.18)] text-[rgba(245,240,232,0.75)] font-code text-[11px] px-[12px] py-[5px] rounded-[5px] cursor-pointer transition-all duration-150 hover:bg-[rgba(245,240,232,0.2)] hover:text-[var(--bg)]" onClick={handleNewReview}>
             + New Review
           </button>
           <button className="bg-[rgba(245,240,232,0.1)] border border-[rgba(245,240,232,0.18)] text-[rgba(245,240,232,0.75)] font-code text-[11px] px-[12px] py-[5px] rounded-[5px] cursor-pointer transition-all duration-150 hover:bg-[rgba(245,240,232,0.2)] hover:text-[var(--bg)]">
@@ -200,34 +237,47 @@ export default function Page() {
         </div>
       </header>
 
+      {/* VALIDATION ERROR BANNER */}
+      {validationError && (
+        <div className="bg-[#fff0ed] text-[var(--danger)] border-b border-[var(--danger)] px-[20px] py-[8px] font-code text-[11px] flex items-center gap-[8px]">
+          <span>⚠️</span> {validationError}
+        </div>
+      )}
+
       {/* SHELL */}
       <div className="flex-1 flex overflow-hidden min-h-0">
-        <IssueSidebar />
+        <ErrorBoundary fallbackTitle="Sidebar Error" fallbackMessage="Failed to load the issue tracker." compact>
+          {chatStarted && <IssueSidebar />}
+        </ErrorBoundary>
 
         <div className="flex-1 flex flex-col overflow-hidden min-w-0 transition-all duration-300">
-          {!chatStarted ? (
-            <EmptyState onFileSelect={startChat} />
-          ) : (
-            <div className="flex-1 overflow-y-auto py-[28px] flex flex-col gap-[0]">
-              {messages}
-              {isTyping && <TimelineNode role="ai" isTyping content="" />}
-            </div>
-          )}
+          <div className="flex-1 overflow-y-auto py-[28px] flex flex-col gap-[0]">
+            {!chatStarted ? (
+              <EmptyState onFileSelect={handleFileSelect} />
+            ) : (
+              <ErrorBoundary fallbackTitle="Chat Error" fallbackMessage="Failed to render chat messages. Try reloading." className="h-full">
+                {messages}
+                {isTyping && <TimelineNode role="ai" isTyping content="" />}
+              </ErrorBoundary>
+            )}
+          </div>
 
-          <ChatInput onSend={handleSend} onQuickSend={handleSend} />
+          <ChatInput onSend={handleSend} onQuickSend={handleSend} onFileUpload={handleFileUpload} />
         </div>
 
-        {/* CODE PANEL */}
-        <CodePanel 
-          isOpen={isCodePanelOpen} 
-          onClose={() => setIsCodePanelOpen(false)}
-          filename="auth.service.ts"
-          language="TypeScript"
-          codeLines={SOURCE_LINES}
-          pins={LINE_PINS}
-          activeLine={activeLine}
-          onPinClick={(id) => handleSend(`Tell me more about finding ${id}`)}
-        />
+        {/* CODE PANEL — powered by real codeLines from the pipeline */}
+        <ErrorBoundary fallbackTitle="Code Panel Error" fallbackMessage="Failed to render code preview." className="w-[380px] h-full" compact>
+          <CodePanel
+            isOpen={isCodePanelOpen}
+            onClose={handleCloseCodePanel}
+            filename={filename}
+            language={language}
+            codeLines={codeLines}
+            pins={pins}
+            activeLine={activeLine}
+            onPinClick={handlePinClick}
+          />
+        </ErrorBoundary>
       </div>
     </div>
   );
