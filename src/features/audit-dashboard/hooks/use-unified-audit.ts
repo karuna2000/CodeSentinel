@@ -19,14 +19,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import { appStore } from '@/stores/app.store';
 import type { AppStoreState } from '@/stores/app.store';
+import type { ReasoningOutput } from '@/types/llm-reasoning';
 import {
   validateFileSize,
   validateFileType,
   validatePasteContent,
 } from '@/lib/validation';
+import type { InputPayload, ProcessingResult, ProcessingState } from '@/types/audit';
 import { readFileAsync, normalizePayload } from '../utils/payload-scrubber';
 import { generateVirtualFilename } from '../utils/filename-generator';
 import { processPayload } from '../services/audit-engine';
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // ---------------------------------------------------------------------------
 // Hook
@@ -44,7 +48,7 @@ export function useUnifiedAudit() {
   // -------------------------------------------------------------------------
   // Action: ingest a File object
   // -------------------------------------------------------------------------
-  const setPayloadFromFile = useCallback(async (file: File): Promise<void> => {
+  const setPayloadFromFile = useCallback(async (file: File): Promise<ProcessingResult | null> => {
     // Reset error state
     appStore.setState({ validationError: null, processingState: 'reading' });
 
@@ -55,7 +59,7 @@ export function useUnifiedAudit() {
         processingState: 'error',
         validationError: sizeCheck.error ?? 'File is too large.',
       });
-      return;
+      return null;
     }
 
     // 2. Validate file type
@@ -65,7 +69,7 @@ export function useUnifiedAudit() {
         processingState: 'error',
         validationError: typeCheck.error ?? 'File type is not supported.',
       });
-      return;
+      return null;
     }
 
     // 3. Read file content asynchronously
@@ -77,12 +81,19 @@ export function useUnifiedAudit() {
         processingState: 'error',
         validationError: `Could not read file: ${file.name}`,
       });
-      return;
+      return null;
     }
 
     // 4. Normalise into InputPayload
-    appStore.setState({ processingState: 'processing' });
+    appStore.setState({ processingState: 'normalizing' });
+    await delay(600);
     const payload = normalizePayload(content, file.name, 'file-upload');
+
+    appStore.setState({ processingState: 'understanding' });
+    await delay(600);
+    
+    appStore.setState({ processingState: 'grounding' });
+    await delay(600);
 
     // 5. Run audit engine
     const result = processPayload(payload);
@@ -90,17 +101,19 @@ export function useUnifiedAudit() {
     appStore.setState({
       inputPayload: payload,
       processingResult: result,
-      processingState: 'done',
+      processingState: 'reasoning',
       validationError: null,
     });
+
+    return result;
   }, []);
 
   // -------------------------------------------------------------------------
   // Action: ingest pasted / typed text
   // -------------------------------------------------------------------------
-  const setPayloadFromText = useCallback((text: string, explicitFilename?: string): void => {
+  const setPayloadFromText = useCallback(async (text: string, explicitFilename?: string): Promise<ProcessingResult | null> => {
     // Reset
-    appStore.setState({ validationError: null, processingState: 'processing' });
+    appStore.setState({ validationError: null, processingState: 'normalizing' });
 
     // 1. Validate paste content (size + heuristic)
     const pasteCheck = validatePasteContent(text);
@@ -109,9 +122,10 @@ export function useUnifiedAudit() {
         processingState: 'error',
         validationError: pasteCheck.error ?? 'Pasted content is not valid.',
       });
-      return;
+      return null;
     }
 
+    await delay(600);
     // 2. Derive a meaningful virtual filename + language if not explicitly provided
     const virtual = generateVirtualFilename(text);
     const resolvedFilename = explicitFilename ?? virtual.filename;
@@ -120,18 +134,25 @@ export function useUnifiedAudit() {
     //    in normalizePayload picks up the correct language label
     const payload = normalizePayload(text, resolvedFilename, 'paste');
 
+    appStore.setState({ processingState: 'understanding' });
+    await delay(600);
+
+    appStore.setState({ processingState: 'grounding' });
+    await delay(600);
+
     // 4. Process
     const result = processPayload(payload);
 
     appStore.setState({
       inputPayload: payload,
       processingResult: result,
-      processingState: 'done',
+      processingState: 'reasoning',
       validationError: null,
     });
+
+    return result;
   }, []);
 
-  // -------------------------------------------------------------------------
   // Action: reset everything back to idle
   // -------------------------------------------------------------------------
   const reset = useCallback((): void => {
@@ -150,8 +171,8 @@ export function useUnifiedAudit() {
     processingState: state.processingState,
     validationError: state.validationError,
     // Derived convenience flags
-    isProcessing: state.processingState === 'reading' || state.processingState === 'processing',
-    hasResult: state.processingState === 'done' && state.processingResult !== null,
+    isProcessing: ['reading', 'normalizing', 'understanding', 'grounding'].includes(state.processingState),
+    isReasoning: state.processingState === 'reasoning',
     hasError: state.processingState === 'error',
     // Actions
     setPayloadFromFile,
