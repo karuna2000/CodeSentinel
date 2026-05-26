@@ -6,9 +6,11 @@ interface ChatInputProps {
   onQuickSend: (message: string) => void;
   /** Called when a valid file is attached — passes the real File object */
   onFileUpload?: (file: File) => void;
+  isReasoning?: boolean;
+  onCancel?: () => void;
 }
 
-export function ChatInput({ onSend, onQuickSend, onFileUpload }: ChatInputProps) {
+export function ChatInput({ onSend, onQuickSend, onFileUpload, isReasoning, onCancel }: ChatInputProps) {
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -105,13 +107,23 @@ export function ChatInput({ onSend, onQuickSend, onFileUpload }: ChatInputProps)
             📎
           </label>
         </div>
-        <button
-          onClick={handleSend}
-          title="Send"
-          className="bg-[var(--text)] text-[var(--bg)] border-none rounded-[8px] w-[40px] h-[40px] flex items-center justify-center cursor-pointer text-[16px] transition-all duration-150 shrink-0 hover:bg-[var(--accent)] hover:scale-105"
-        >
-          ↑
-        </button>
+        {isReasoning ? (
+          <button
+            onClick={onCancel}
+            title="Stop analysis"
+            className="bg-[rgba(200,68,10,0.1)] text-[var(--accent)] border border-[rgba(200,68,10,0.2)] rounded-[8px] w-[40px] h-[40px] flex items-center justify-center cursor-pointer text-[14px] transition-all duration-150 shrink-0 hover:bg-[rgba(200,68,10,0.2)] hover:scale-105"
+          >
+            <span className="w-[12px] h-[12px] bg-[var(--accent)] rounded-[2px]" />
+          </button>
+        ) : (
+          <button
+            onClick={handleSend}
+            title="Send"
+            className="bg-[var(--text)] text-[var(--bg)] border-none rounded-[8px] w-[40px] h-[40px] flex items-center justify-center cursor-pointer text-[16px] transition-all duration-150 shrink-0 hover:bg-[var(--accent)] hover:scale-105"
+          >
+            ↑
+          </button>
+        )}
       </div>
       <div className="flex gap-[6px] flex-wrap">
         <HintChip text="🔴 Security issues" onClick={() => onQuickSend("Walk me through the security issues")} />

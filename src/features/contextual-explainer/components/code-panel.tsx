@@ -88,8 +88,8 @@ export const CodePanel = React.memo(function CodePanel({
         </div>
       </div>
 
-      <div ref={codeWrapRef} className="flex-1 overflow-y-auto overflow-x-hidden w-[380px]">
-        <div className="py-[10px] font-code text-[11px] leading-[1.75]">
+      <div ref={codeWrapRef} className="flex-1 overflow-y-auto overflow-x-auto w-[380px]">
+        <div className="py-[10px] font-code text-[11px] leading-[1.75] min-w-max">
           {renderedLines.map((line) => {
             const pin = pins[line.num];
             const isActive = activeLine === line.num;

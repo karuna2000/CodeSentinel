@@ -13,6 +13,8 @@
 
 import type { InputPayload, ProcessingResult, CodeLine, CodePin } from '@/types/audit';
 import { formatByteSize } from '../utils/payload-scrubber';
+import { runCodeUnderstandingAgent } from '@/features/code-understanding/agent';
+import { artifactFromProcessingResult } from '@/types/artifact';
 
 /**
  * Escapes HTML special characters in a code line string so it is safe
@@ -57,10 +59,28 @@ export function processPayload(payload: InputPayload): ProcessingResult {
   // A future AI enrichment stage will populate these with real findings.
   const pins: Record<number, CodePin> = {};
 
-  return {
+  // Build a partial ProcessingResult so we can derive an InputArtifact
+  // for the Code Understanding Agent (which needs byteSize, formattedSize, etc.)
+  const formattedSize = formatByteSize(payload.byteSize);
+
+  const partialResult: ProcessingResult = {
     payload,
     codeLines,
     pins,
-    formattedSize: formatByteSize(payload.byteSize),
+    formattedSize,
+    codeUnderstanding: null,
+    reasoning: null,
+  };
+
+  // Derive the InputArtifact representation needed by the agent
+  const source = payload.source === 'file-upload' ? 'upload' : 'paste';
+  const artifact = artifactFromProcessingResult(partialResult, source);
+
+  // Run the Code Understanding Agent (deterministic, no LLM, safe to run synchronously)
+  const codeUnderstanding = runCodeUnderstandingAgent(artifact);
+
+  return {
+    ...partialResult,
+    codeUnderstanding,
   };
 }

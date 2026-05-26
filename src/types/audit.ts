@@ -2,6 +2,9 @@
  * Shared audit/ingestion types for the real input-processing pipeline.
  */
 
+import type { CodeUnderstandingOutput } from './code-understanding';
+import type { ReasoningOutput } from './llm-reasoning';
+
 /** Source of the ingested input */
 export type InputSource = 'file-upload' | 'paste' | 'text-input';
 
@@ -50,7 +53,19 @@ export interface ProcessingResult {
   pins: Record<number, CodePin>;
   /** Human-readable file size string, e.g. "1.2 KB" */
   formattedSize: string;
+  /**
+   * Structured output from the Code Understanding Agent.
+   * Populated after the understanding pipeline runs.
+   * Null when the agent was not yet executed (e.g. during initial parse).
+   */
+  codeUnderstanding: CodeUnderstandingOutput | null;
+  /**
+   * Structured findings from the LLM Reasoning Layer.
+   * Populated asynchronously after the understanding pipeline runs.
+   * Null when the reasoning stage has not yet executed.
+   */
+  reasoning: ReasoningOutput | null;
 }
 
 /** Processing lifecycle state */
-export type ProcessingState = 'idle' | 'reading' | 'processing' | 'done' | 'error';
+export type ProcessingState = 'idle' | 'reading' | 'normalizing' | 'understanding' | 'grounding' | 'reasoning' | 'done' | 'error';

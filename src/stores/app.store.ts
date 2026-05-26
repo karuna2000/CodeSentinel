@@ -47,8 +47,11 @@ function getState(): AppStoreState {
   return _state;
 }
 
-function setState(patch: Partial<AppStoreState>): void {
-  _state = { ..._state, ...patch };
+type SetStatePayload = Partial<AppStoreState> | ((prev: AppStoreState) => Partial<AppStoreState>);
+
+function setState(patch: SetStatePayload): void {
+  const nextPatch = typeof patch === 'function' ? patch(_state) : patch;
+  _state = { ..._state, ...nextPatch };
   _listeners.forEach((l) => l(_state));
 }
 
