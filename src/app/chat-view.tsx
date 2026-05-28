@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { IssueSidebar } from "@/features/audit-dashboard/components/issue-sidebar";
+import { VirtualizedChatList, type VirtualItemData } from "@/features/audit-dashboard/components/virtualized-chat-list";
 import { EmptyState } from "@/features/audit-dashboard/components/empty-state";
 import { ChatInput } from "@/features/audit-dashboard/components/chat-input";
 import { FindingBubble } from "@/features/contextual-explainer/components/finding-bubble";
@@ -23,18 +23,25 @@ import type { ProcessingResult } from "@/types/audit";
 
 interface StreamingTimelineNodeProps {
   initialResult: ProcessingResult;
-  onLineClick: (lineNum: number) => void;
-  onActiveStreamChange?: (isLoading: boolean, stopFn: (() => void) | null) => void;
+  onLineClick?: (line: number) => void;
+  onActiveStreamChange?: (loading: boolean, stopFn: (() => void) | null) => void;
+  onReasoningComplete?: (reasoning: any) => void;
 }
 
 export function StreamingTimelineNode({
   initialResult,
   onLineClick,
   onActiveStreamChange,
+  onReasoningComplete,
 }: StreamingTimelineNodeProps) {
   const { object: streamedReasoning, submit, isLoading: isReasoning, stop } = experimental_useObject({
     api: "/api/audit/reason",
     schema: ReasoningOutputSchema,
+    onFinish: (res) => {
+      if (res.object) {
+        onReasoningComplete?.(res.object);
+      }
+    }
   });
 
   const hasSubmitted = React.useRef(false);
@@ -87,6 +94,7 @@ export function StreamingTimelineNode({
   ], []);
 
   const [thoughtIndex, setThoughtIndex] = React.useState(0);
+  const [activeCategory, setActiveCategory] = React.useState<string | null>(null);
   
   React.useEffect(() => {
     if (isReasoning && findings.length === 0) {
@@ -96,6 +104,15 @@ export function StreamingTimelineNode({
       return () => clearInterval(interval);
     }
   }, [isReasoning, findings.length, STREAMING_THOUGHTS.length]);
+
+  const filteredFindings = React.useMemo(() => {
+    if (!activeCategory) return findings;
+    return findings.filter((f: any) => {
+      const cat = f.category === "security" ? "sec" :
+                  f.category === "scalability" || f.category === "performance" ? "scale" : "arch";
+      return cat === activeCategory;
+    });
+  }, [findings, activeCategory]);
 
   // Compute counts dynamically
   const archCount = findings.filter(
@@ -240,12 +257,57 @@ export function StreamingTimelineNode({
               {isReasoning && <span className="text-[10.5px] text-[var(--muted)] font-code font-normal">(streaming findings...)</span>}
             </div>
 
-            {findings.length === 0 ? (
+            {findings.length > 0 && (
+              <div className="flex items-center gap-[4px] mt-[2px] bg-[var(--bg)] p-[4px] rounded-[6px] border border-[var(--border)] overflow-hidden">
+                <button
+                  onClick={() => setActiveCategory(null)}
+                  className={`flex-1 flex items-center justify-center gap-[4px] p-[4px_0] rounded-[4px] font-code text-[9.5px] font-semibold transition-all duration-150 cursor-pointer border ${
+                    activeCategory === null
+                      ? "bg-[var(--text)] text-[var(--bg)] border-transparent shadow-sm"
+                      : "bg-transparent text-[var(--muted)] hover:bg-[var(--border)] border-transparent hover:text-[var(--text)]"
+                  }`}
+                >
+                  All <span className="opacity-75 font-normal">({findings.length})</span>
+                </button>
+                <button
+                  onClick={() => setActiveCategory("arch")}
+                  className={`flex-1 flex items-center justify-center gap-[4px] p-[4px_0] rounded-[4px] font-code text-[9.5px] font-semibold transition-all duration-150 cursor-pointer border ${
+                    activeCategory === "arch"
+                      ? "bg-[var(--info)] text-white border-transparent shadow-sm"
+                      : "bg-transparent text-[var(--muted)] hover:bg-[var(--border)] border-transparent hover:text-[var(--text)]"
+                  }`}
+                >
+                  Arch <span className="opacity-75 font-normal">({archCount})</span>
+                </button>
+                <button
+                  onClick={() => setActiveCategory("sec")}
+                  className={`flex-1 flex items-center justify-center gap-[4px] p-[4px_0] rounded-[4px] font-code text-[9.5px] font-semibold transition-all duration-150 cursor-pointer border ${
+                    activeCategory === "sec"
+                      ? "bg-[var(--danger)] text-white border-transparent shadow-sm"
+                      : "bg-transparent text-[var(--muted)] hover:bg-[var(--border)] border-transparent hover:text-[var(--text)]"
+                  }`}
+                >
+                  Sec <span className="opacity-75 font-normal">({secCount})</span>
+                </button>
+                <button
+                  onClick={() => setActiveCategory("scale")}
+                  className={`flex-1 flex items-center justify-center gap-[4px] p-[4px_0] rounded-[4px] font-code text-[9.5px] font-semibold transition-all duration-150 cursor-pointer border ${
+                    activeCategory === "scale"
+                      ? "bg-[var(--warn)] text-white border-transparent shadow-sm"
+                      : "bg-transparent text-[var(--muted)] hover:bg-[var(--border)] border-transparent hover:text-[var(--text)]"
+                  }`}
+                >
+                  Scale <span className="opacity-75 font-normal">({scaleCount})</span>
+                </button>
+              </div>
+            )}
+
+            {filteredFindings.length === 0 ? (
               <div className="text-[11.5px] text-[var(--muted)] font-code italic py-[8px] border border-dashed border-[var(--border)] rounded-[6px] text-center">
-                Waiting for the first finding to stream...
+                {findings.length === 0 ? "Waiting for the first finding to stream..." : "No findings in this category."}
               </div>
             ) : (
-              findings.map((f: any, index: number) => {
+              filteredFindings.map((f: any, index: number) => {
                 const categoryLabel = f.category === "security" ? "Security" :
                                       f.category === "scalability" || f.category === "performance" ? "Scalability" : "Architectural";
                 const categoryKey = f.category === "security" ? "sec" :
@@ -333,6 +395,7 @@ export default function Page() {
     setPayloadFromFile,
     setPayloadFromText,
     reset,
+    isProcessing,
   } = useUnifiedAudit();
 
   const stopStreamRef = React.useRef<(() => void) | null>(null);
@@ -346,6 +409,7 @@ export default function Page() {
   const [chatStarted, setChatStarted] = useState(false);
   type ChatMessageData = 
     | { type: 'text', id: string, role: 'user' | 'ai', content: string }
+    | { type: 'user-artifact', id: string, result: ProcessingResult }
     | { type: 'review-request', id: string, result: ProcessingResult };
   const [messages, setMessages] = useState<ChatMessageData[]>([]);
   const [isTyping, setIsTyping] = useState(false);
@@ -353,24 +417,40 @@ export default function Page() {
   // Code Panel State
   const [isCodePanelOpen, setIsCodePanelOpen] = useState(false);
   const [activeLine, setActiveLine] = useState<number | null>(null);
+  const [activeCodeResult, setActiveCodeResult] = useState<ProcessingResult | null>(null);
 
-  const codeLines = React.useMemo(() => processingResult?.codeLines ?? [], [processingResult?.codeLines]);
-  const filename = processingResult?.payload.filename ?? "uploaded-code";
-  const language = processingResult?.payload.language ?? "Unknown";
+  const activeResult = activeCodeResult || processingResult;
+  const codeLines = React.useMemo(() => activeResult?.codeLines ?? [], [activeResult?.codeLines]);
+  const filename = activeResult?.payload.filename ?? "uploaded-code";
+  const language = activeResult?.payload.language ?? "Unknown";
 
-  const handleLineClick = React.useCallback((lineNum: number) => {
+  const handleLineClick = React.useCallback((lineNum: number, result: ProcessingResult) => {
+    setActiveCodeResult(result);
     setIsCodePanelOpen(true);
     setActiveLine(lineNum);
     setTimeout(() => setActiveLine(null), 1500);
   }, []);
 
-  const appendUserArtifactNode = React.useCallback((freshResult: ProcessingResult) => {
-    const id = freshResult.payload.filename + Date.now();
+  const handleViewInPanel = React.useCallback((result: ProcessingResult) => {
+    setActiveCodeResult(result);
+    setIsCodePanelOpen(true);
+  }, []);
+
+  const appendUserArtifact = React.useCallback((freshResult: ProcessingResult) => {
+    const id = "ua-" + freshResult.payload.filename + Date.now();
+    setMessages((prev) => [
+      ...prev,
+      { type: 'user-artifact', id, result: freshResult }
+    ]);
+    setIsTyping(false);
+  }, []);
+
+  const appendReviewRequest = React.useCallback((freshResult: ProcessingResult) => {
+    const id = "rr-" + freshResult.payload.filename + Date.now();
     setMessages((prev) => [
       ...prev,
       { type: 'review-request', id, result: freshResult }
     ]);
-    setIsTyping(false);
   }, []);
 
   const handleSend = React.useCallback((text: string) => {
@@ -379,8 +459,10 @@ export default function Page() {
     }
 
     if (text.length >= 50 && isLikelyCodeOrTechContent(text)) {
-      setPayloadFromText(text).then((result) => {
-        if (result) appendUserArtifactNode(result);
+      setPayloadFromText(text, undefined, (result) => {
+        appendUserArtifact(result);
+      }).then((result) => {
+        if (result) appendReviewRequest(result);
       });
       return;
     }
@@ -393,7 +475,7 @@ export default function Page() {
       setMessages((prev) => [...prev, { type: 'text', id: `resp-${Date.now()}`, role: 'ai', content: "I can only review code at the moment. Please paste a valid code snippet or upload a file!" }]);
       setIsTyping(false);
     }, 1200);
-  }, [chatStarted, setPayloadFromText, appendUserArtifactNode]);
+  }, [chatStarted, setPayloadFromText, appendUserArtifact, appendReviewRequest]);
 
   const handlePinClick = React.useCallback((id: string) => {
     handleSend(`Tell me more about finding ${id}`);
@@ -405,8 +487,11 @@ export default function Page() {
 
   const handleFileSelect = async (file?: File) => {
     if (file) {
-      const result = await setPayloadFromFile(file);
-      if (result) appendUserArtifactNode(result);
+      setPayloadFromFile(file, (result) => {
+        appendUserArtifact(result);
+      }).then((result) => {
+        if (result) appendReviewRequest(result);
+      });
     }
     setChatStarted(true);
   };
@@ -415,10 +500,12 @@ export default function Page() {
     if (!chatStarted) {
       setChatStarted(true);
     }
-    setPayloadFromFile(file).then((result) => {
-      if (result) appendUserArtifactNode(result);
+    setPayloadFromFile(file, (result) => {
+      appendUserArtifact(result);
+    }).then((result) => {
+      if (result) appendReviewRequest(result);
     });
-  }, [chatStarted, setPayloadFromFile, appendUserArtifactNode]);
+  }, [chatStarted, setPayloadFromFile, appendUserArtifact, appendReviewRequest]);
 
   const handleNewReview = () => {
     setChatStarted(false);
@@ -428,10 +515,13 @@ export default function Page() {
   };
 
   // Dynamically generate pins from reasoning findings in real-time!
-  const findings = React.useMemo(() => processingResult?.reasoning?.findings ?? [], [processingResult?.reasoning?.findings]);
+  const findings = React.useMemo(() => activeResult?.reasoning?.findings ?? [], [activeResult?.reasoning?.findings]);
+
   const dynamicPins = React.useMemo(() => {
-    const pinsMap: Record<number, CodePin> = {};
-    findings.forEach((finding, index) => {
+    if (!activeResult) return {};
+    const pins = { ...activeResult.pins };
+
+    findings.forEach((finding: any, index: number) => {
       const severity = finding.severity === "critical" ? "critical" :
                        finding.severity === "high" ? "high" :
                        finding.severity === "medium" ? "medium" : "low";
@@ -463,14 +553,14 @@ export default function Page() {
       }
 
       if (foundLine) {
-        pinsMap[foundLine] = {
+        pins[foundLine] = {
           severity,
           id: `f-${index}`,
         };
       }
     });
-    return pinsMap;
-  }, [findings, codeLines]);
+    return pins;
+  }, [findings, codeLines, activeResult]);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden relative">
@@ -485,16 +575,6 @@ export default function Page() {
           <span className="w-[6px] h-[6px] rounded-full bg-[#4af0a0] animate-[blink_1.8s_infinite]"></span> Agent active
         </div>
         <div className="ml-auto flex items-center gap-[10px]">
-          <button 
-            className={`bg-transparent font-code text-[11px] px-[12px] py-[5px] rounded-[5px] cursor-pointer transition-all duration-150 border ${
-              isCodePanelOpen 
-                ? "bg-[rgba(200,68,10,0.7)] border-[rgba(200,68,10,0.9)] text-white hover:bg-[rgba(200,68,10,0.8)]" 
-                : "border-[rgba(245,240,232,0.18)] text-[rgba(245,240,232,0.75)] hover:bg-[rgba(245,240,232,0.2)] hover:text-[var(--bg)]"
-            }`}
-            onClick={() => setIsCodePanelOpen(!isCodePanelOpen)}
-          >
-            ⌨ View Code
-          </button>
           <button className="bg-[rgba(245,240,232,0.1)] border border-[rgba(245,240,232,0.18)] text-[rgba(245,240,232,0.75)] font-code text-[11px] px-[12px] py-[5px] rounded-[5px] cursor-pointer transition-all duration-150 hover:bg-[rgba(245,240,232,0.2)] hover:text-[var(--bg)]" onClick={handleNewReview}>
             + New Review
           </button>
@@ -512,84 +592,107 @@ export default function Page() {
         </div>
       )}
 
-      {/* SHELL */}
-      <div className="flex-1 flex overflow-hidden min-h-0">
-        <ErrorBoundary fallbackTitle="Sidebar Error" fallbackMessage="Failed to load the issue tracker." compact>
-          {chatStarted && <IssueSidebar onIssueClick={handleLineClick} isStreaming={isStreaming} />}
-        </ErrorBoundary>
+        {/* SHELL */}
+        <div className="flex-1 flex overflow-hidden min-h-0">
 
         <div className="flex-1 flex flex-col overflow-hidden min-w-0 transition-all duration-300">
-          <div className="flex-1 overflow-y-auto py-[28px] flex flex-col gap-[0]">
-            {!chatStarted ? (
+          {!chatStarted ? (
+            <div className="flex-1 overflow-y-auto py-[28px] flex flex-col">
               <EmptyState onFileSelect={handleFileSelect} />
-            ) : (
-              <ErrorBoundary fallbackTitle="Chat Error" fallbackMessage="Failed to render chat messages. Try reloading." className="h-full">
-                {messages.map(m => {
-                  if (m.type === 'text') {
+            </div>
+          ) : (
+            <ErrorBoundary fallbackTitle="Chat Error" fallbackMessage="Failed to render chat messages. Try reloading." className="h-full">
+              <VirtualizedChatList<any>
+                className="py-[28px]"
+                items={[
+                  ...messages.map((m) => ({ id: m.id, type: m.type, data: m })),
+                  ...(isTyping ? [{ id: "typing", type: "typing", data: null }] : []),
+                  ...(processingState === "normalizing" ? [{ id: "proc-norm", type: "processing", data: "normalizing" }] : []),
+                  ...(processingState === "understanding" ? [{ id: "proc-und", type: "processing", data: "understanding" }] : []),
+                  ...(processingState === "grounding" ? [{ id: "proc-grd", type: "processing", data: "grounding" }] : []),
+                ]}
+                renderItem={(item) => {
+                  if (item.type === "text") {
                     return (
                       <TimelineNode
-                        key={m.id}
-                        role={m.role}
+                        role={item.data.role}
                         timestamp={new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                        content={m.content}
+                        content={item.data.content}
                       />
                     );
                   }
-                  if (m.type === 'review-request') {
+                  if (item.type === "user-artifact") {
                     const artifact = artifactFromProcessingResult(
-                      m.result,
-                      m.result.payload.source === "paste" ? "paste" : "upload"
+                      item.data.result,
+                      item.data.result.payload.source === "paste" ? "paste" : "upload"
                     );
                     return (
-                      <React.Fragment key={m.id}>
-                        <TimelineNode
-                          role="user"
-                          timestamp={new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                          content={
-                            <div className="flex flex-col gap-[8px]">
-                              <InputArtifactCard
-                                filename={artifact.filename}
-                                language={artifact.language}
-                                lines={artifact.lineCount}
-                                size={artifact.formattedSize}
-                                source={artifact.source}
-                                codeLines={m.result.codeLines}
-                                pins={m.result.pins}
-                                onViewInPanel={() => setIsCodePanelOpen(true)}
-                              />
-                            </div>
-                          }
-                        />
-                        <StreamingTimelineNode 
-                          initialResult={m.result}
-                          onLineClick={handleLineClick}
-                          onActiveStreamChange={handleStreamChange}
-                        />
-                      </React.Fragment>
+                      <TimelineNode
+                        role="user"
+                        timestamp={new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        content={
+                          <div className="flex flex-col gap-[8px]">
+                            <InputArtifactCard
+                              filename={artifact.filename}
+                              language={artifact.language}
+                              lines={artifact.lineCount}
+                              size={artifact.formattedSize}
+                              source={artifact.source}
+                              codeLines={item.data.result.codeLines}
+                              pins={item.data.result.pins}
+                              onViewInPanel={() => handleViewInPanel(item.data.result)}
+                            />
+                          </div>
+                        }
+                      />
+                    );
+                  }
+                  if (item.type === "review-request") {
+                    return (
+                      <StreamingTimelineNode
+                        initialResult={item.data.result}
+                        onLineClick={(lineNum) => handleLineClick(lineNum, item.data.result)}
+                        onActiveStreamChange={handleStreamChange}
+                        onReasoningComplete={(reasoning) => {
+                          setMessages((prev) => 
+                            prev.map(m => m.id === item.id && m.type === 'review-request' ? {
+                              ...m,
+                              result: { ...m.result, reasoning }
+                            } : m)
+                          );
+                        }}
+                      />
+                    );
+                  }
+                  if (item.type === "typing") {
+                    return <TimelineNode role="ai" isTyping content="" />;
+                  }
+                  if (item.type === "processing") {
+                    const msg = 
+                      item.data === "normalizing" ? "Normalizing payload..." :
+                      item.data === "understanding" ? "Extracting architecture and metadata..." :
+                      item.data === "grounding" ? "Retrieving version-specific knowledge..." : "Processing...";
+                    
+                    return (
+                      <TimelineNode 
+                        role="ai" 
+                        timestamp={new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} 
+                        content={<span className="flex items-center gap-[6px] text-[var(--muted)] italic font-code"><span className="w-[6px] h-[6px] rounded-full bg-[var(--info)] animate-pulse"></span> {msg}</span>} 
+                      />
                     );
                   }
                   return null;
-                })}
-                {isTyping && <TimelineNode role="ai" isTyping content="" />}
-                
-                {processingState === 'normalizing' && (
-                  <TimelineNode role="ai" timestamp={new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} content={<span className="flex items-center gap-[6px] text-[var(--muted)] italic font-code"><span className="w-[6px] h-[6px] rounded-full bg-[var(--info)] animate-pulse"></span> Normalizing payload...</span>} />
-                )}
-                {processingState === 'understanding' && (
-                  <TimelineNode role="ai" timestamp={new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} content={<span className="flex items-center gap-[6px] text-[var(--muted)] italic font-code"><span className="w-[6px] h-[6px] rounded-full bg-[var(--info)] animate-pulse"></span> Extracting architecture and metadata...</span>} />
-                )}
-                {processingState === 'grounding' && (
-                  <TimelineNode role="ai" timestamp={new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} content={<span className="flex items-center gap-[6px] text-[var(--muted)] italic font-code"><span className="w-[6px] h-[6px] rounded-full bg-[var(--info)] animate-pulse"></span> Retrieving version-specific knowledge...</span>} />
-                )}
-              </ErrorBoundary>
-            )}
-          </div>
+                }}
+              />
+            </ErrorBoundary>
+          )}
 
           <ChatInput 
             onSend={handleSend} 
             onQuickSend={handleSend} 
             onFileUpload={handleFileUpload}
             isReasoning={isStreaming}
+            disabled={isProcessing || isTyping || isStreaming}
             onCancel={() => {
               stopStreamRef.current?.();
               setIsStreaming(false);

@@ -48,7 +48,10 @@ export function useUnifiedAudit() {
   // -------------------------------------------------------------------------
   // Action: ingest a File object
   // -------------------------------------------------------------------------
-  const setPayloadFromFile = useCallback(async (file: File): Promise<ProcessingResult | null> => {
+  const setPayloadFromFile = useCallback(async (
+    file: File,
+    onParsed?: (result: ProcessingResult) => void
+  ): Promise<ProcessingResult | null> => {
     // Reset error state
     appStore.setState({ validationError: null, processingState: 'reading' });
 
@@ -84,19 +87,23 @@ export function useUnifiedAudit() {
       return null;
     }
 
-    // 4. Normalise into InputPayload
-    appStore.setState({ processingState: 'normalizing' });
-    await delay(600);
+    // 4. Normalise into InputPayload and process synchronously
     const payload = normalizePayload(content, file.name, 'file-upload');
+    const result = processPayload(payload);
 
+    // Provide the result back immediately so UI can render the user-artifact card
+    if (onParsed) {
+      onParsed(result);
+    }
+
+    appStore.setState({ processingState: 'normalizing', processingResult: result });
+    await delay(600);
+    
     appStore.setState({ processingState: 'understanding' });
     await delay(600);
     
     appStore.setState({ processingState: 'grounding' });
     await delay(600);
-
-    // 5. Run audit engine
-    const result = processPayload(payload);
 
     appStore.setState({
       inputPayload: payload,
@@ -111,7 +118,11 @@ export function useUnifiedAudit() {
   // -------------------------------------------------------------------------
   // Action: ingest pasted / typed text
   // -------------------------------------------------------------------------
-  const setPayloadFromText = useCallback(async (text: string, explicitFilename?: string): Promise<ProcessingResult | null> => {
+  const setPayloadFromText = useCallback(async (
+    text: string, 
+    explicitFilename?: string,
+    onParsed?: (result: ProcessingResult) => void
+  ): Promise<ProcessingResult | null> => {
     // Reset
     appStore.setState({ validationError: null, processingState: 'normalizing' });
 
@@ -125,23 +136,28 @@ export function useUnifiedAudit() {
       return null;
     }
 
-    await delay(600);
+    await delay(600); // initial delay to feel like work is happening
+    
     // 2. Derive a meaningful virtual filename + language if not explicitly provided
     const virtual = generateVirtualFilename(text);
     const resolvedFilename = explicitFilename ?? virtual.filename;
 
-    // 3. Normalise — use the virtual extension-based filename so detectLanguage
-    //    in normalizePayload picks up the correct language label
+    // 3. Normalise and process synchronously
     const payload = normalizePayload(text, resolvedFilename, 'paste');
+    const result = processPayload(payload);
+
+    if (onParsed) {
+      onParsed(result);
+    }
+
+    appStore.setState({ processingState: 'normalizing', processingResult: result });
+    await delay(600);
 
     appStore.setState({ processingState: 'understanding' });
     await delay(600);
 
     appStore.setState({ processingState: 'grounding' });
     await delay(600);
-
-    // 4. Process
-    const result = processPayload(payload);
 
     appStore.setState({
       inputPayload: payload,
