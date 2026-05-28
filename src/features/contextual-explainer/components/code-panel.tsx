@@ -42,10 +42,23 @@ export const CodePanel = React.memo(function CodePanel({
 
   useEffect(() => {
     if (activeLine && isOpen && codeWrapRef.current) {
-      const lineEl = codeWrapRef.current.querySelector(`#cpln-${activeLine}`);
-      if (lineEl) {
-        lineEl.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
+      // Small timeout to allow any CSS transitions (like width changing from 0) to start
+      setTimeout(() => {
+        const container = codeWrapRef.current;
+        if (!container) return;
+        const lineEl = container.querySelector(`#cpln-${activeLine}`);
+        if (lineEl) {
+          const lineRect = lineEl.getBoundingClientRect();
+          const containerRect = container.getBoundingClientRect();
+          const relativeTop = lineRect.top - containerRect.top;
+          const centerOffset = container.clientHeight / 2 - lineRect.height / 2;
+          
+          container.scrollTo({
+            top: container.scrollTop + relativeTop - centerOffset,
+            behavior: "smooth"
+          });
+        }
+      }, 50);
     }
   }, [activeLine, isOpen]);
 

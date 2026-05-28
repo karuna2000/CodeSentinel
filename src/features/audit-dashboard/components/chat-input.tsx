@@ -7,16 +7,26 @@ interface ChatInputProps {
   /** Called when a valid file is attached — passes the real File object */
   onFileUpload?: (file: File) => void;
   isReasoning?: boolean;
+  disabled?: boolean;
   onCancel?: () => void;
 }
 
-export function ChatInput({ onSend, onQuickSend, onFileUpload, isReasoning, onCancel }: ChatInputProps) {
+export function ChatInput({ onSend, onQuickSend, onFileUpload, isReasoning, disabled, onCancel }: ChatInputProps) {
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  const handleDisabledAction = () => {
+    if (disabled) {
+      setError("Please wait for the active request to finish before interacting.");
+      setTimeout(() => setError(null), 3000);
+      return true;
+    }
+    return false;
+  };
+
   const handleSend = () => {
-    if (!text.trim()) return;
+    if (handleDisabledAction() || !text.trim()) return;
     onSend(text);
     setText("");
     if (textareaRef.current) {
@@ -25,6 +35,14 @@ export function ChatInput({ onSend, onQuickSend, onFileUpload, isReasoning, onCa
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (disabled) {
+      // Ignore navigation keys, block others
+      if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
+        e.preventDefault();
+        handleDisabledAction();
+      }
+      return;
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -41,6 +59,7 @@ export function ChatInput({ onSend, onQuickSend, onFileUpload, isReasoning, onCa
   };
 
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (disabled) return;
     const pastedText = e.clipboardData.getData("text");
     if (!pastedText) return;
 
@@ -55,6 +74,7 @@ export function ChatInput({ onSend, onQuickSend, onFileUpload, isReasoning, onCa
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (disabled) return;
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -99,11 +119,19 @@ export function ChatInput({ onSend, onQuickSend, onFileUpload, isReasoning, onCa
             onChange={handleInput}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
+            onClick={() => handleDisabledAction()}
+            readOnly={disabled}
             placeholder="Ask anything — 'show security issues', 'explain the JWT finding', 'fix the N+1 query'…"
-            className="flex-1 bg-transparent border-none outline-none font-body text-[13px] text-[var(--text)] resize-none min-h-[22px] max-h-[120px] leading-[1.6] placeholder:text-[var(--muted)]"
+            className={`flex-1 bg-transparent border-none outline-none font-body text-[13px] text-[var(--text)] resize-none min-h-[22px] max-h-[120px] leading-[1.6] placeholder:text-[var(--muted)] ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
           />
-          <label className="bg-transparent border-none text-[var(--muted)] cursor-pointer text-[16px] p-0 transition-colors duration-120 leading-none hover:text-[var(--accent)]" title="Attach file">
-            <input type="file" className="hidden" onChange={handleFileChange} />
+          <label 
+            onClick={(e) => {
+              if (handleDisabledAction()) e.preventDefault();
+            }}
+            className={`bg-transparent border-none text-[var(--muted)] text-[16px] p-0 transition-colors duration-120 leading-none ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:text-[var(--accent)]'}`}
+            title="Attach file"
+          >
+            <input type="file" className="hidden" disabled={disabled} onChange={handleFileChange} />
             📎
           </label>
         </div>
@@ -126,21 +154,28 @@ export function ChatInput({ onSend, onQuickSend, onFileUpload, isReasoning, onCa
         )}
       </div>
       <div className="flex gap-[6px] flex-wrap">
-        <HintChip text="🔴 Security issues" onClick={() => onQuickSend("Walk me through the security issues")} />
-        <HintChip text="🚨 Critical only" onClick={() => onQuickSend("What are the critical findings?")} />
-        <HintChip text="🏛 Architecture" onClick={() => onQuickSend("Show me the architectural risks")} />
-        <HintChip text="📈 Scalability" onClick={() => onQuickSend("What scalability bottlenecks exist?")} />
-        <HintChip text="🔑 Fix JWT" onClick={() => onQuickSend("How do I fix the JWT issue?")} />
+        <HintChip text="🔴 Security issues" onClick={() => onQuickSend("Walk me through the security issues")} disabled={disabled} onDisabledClick={handleDisabledAction} />
+        <HintChip text="🚨 Critical only" onClick={() => onQuickSend("What are the critical findings?")} disabled={disabled} onDisabledClick={handleDisabledAction} />
+        <HintChip text="🏛 Architecture" onClick={() => onQuickSend("Show me the architectural risks")} disabled={disabled} onDisabledClick={handleDisabledAction} />
+        <HintChip text="📈 Scalability" onClick={() => onQuickSend("What scalability bottlenecks exist?")} disabled={disabled} onDisabledClick={handleDisabledAction} />
+        <HintChip text="🔑 Fix JWT" onClick={() => onQuickSend("How do I fix the JWT issue?")} disabled={disabled} onDisabledClick={handleDisabledAction} />
       </div>
     </div>
   );
 }
 
-function HintChip({ text, onClick }: { text: string; onClick: () => void }) {
+function HintChip({ text, onClick, disabled, onDisabledClick }: { text: string; onClick: () => void; disabled?: boolean; onDisabledClick?: () => void }) {
   return (
     <button
-      onClick={onClick}
-      className="bg-transparent border border-[var(--border)] text-[var(--muted)] font-code text-[10px] p-[3px_9px] rounded-[20px] cursor-pointer transition-all duration-120 whitespace-nowrap hover:border-[var(--text)] hover:text-[var(--text)]"
+      onClick={(e) => {
+        if (disabled) {
+          e.preventDefault();
+          onDisabledClick?.();
+        } else {
+          onClick();
+        }
+      }}
+      className={`bg-transparent border border-[var(--border)] text-[var(--muted)] font-code text-[10px] p-[3px_9px] rounded-[20px] transition-all duration-120 whitespace-nowrap ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-[var(--text)] hover:text-[var(--text)]'}`}
     >
       {text}
     </button>
