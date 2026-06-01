@@ -1,30 +1,6 @@
-/**
- * Framework Capability Registry — maps frameworks/libraries to their
- * versioned feature sets, API milestones, and grounding sources.
- *
- * This is the static knowledge base for version inference.
- * It intentionally does NOT bake in the LLM's memory — instead it provides
- * structured, curated, updateable metadata that the system can reason over
- * deterministically.
- *
- * Design:
- *  - Pure data — no functions, no side effects
- *  - Each entry is independently maintainable
- *  - Grounding sources point to canonical, up-to-date documentation
- *  - Version ranges use semver-style strings for clarity
- *
- * How it prevents hallucination:
- *  When the system detects "useTransition" in React code, it looks up
- *  REACT_CAPABILITIES and knows: "This is React 18+, here are the docs
- *  to fetch before reasoning about concurrent features."
- *  The LLM never has to guess — it gets grounded context injected.
- */
+
 
 import type { ApiPatternMatch, GroundingSource } from '@/types/version-grounding';
-
-// ---------------------------------------------------------------------------
-// Shared grounding source builders
-// ---------------------------------------------------------------------------
 
 function primaryDoc(label: string, url: string, purpose: string): GroundingSource {
   return { label, url, priority: 1, purpose };
@@ -38,46 +14,32 @@ function supplementaryDoc(label: string, url: string, purpose: string): Groundin
   return { label, url, priority: 3, purpose };
 }
 
-// ---------------------------------------------------------------------------
-// Registry entry shape
-// ---------------------------------------------------------------------------
-
 export interface FrameworkCapabilityEntry {
-  /** Framework/library name — must match FrameworkDetection.name */
+  
   name: string;
-  /**
-   * Version brackets, ordered from newest to oldest.
-   * The detector walks them in order and picks the first that matches.
-   */
+  
+
   versionBrackets: VersionBracket[];
-  /**
-   * API-pattern signatures that indicate specific version features.
-   * Checked against code content.
-   */
+  
+
   apiPatterns: ApiPatternMatch[];
-  /**
-   * Default grounding sources when version is uncertain
-   * (i.e., no specific bracket matched).
-   */
+  
+
   defaultGroundingSources: GroundingSource[];
 }
 
 export interface VersionBracket {
-  /** Human-readable label, e.g. "React 18.x" */
+  
   label: string;
   minVersion: string;
   maxVersion: string | null;
-  /** Confidence modifier applied when this bracket matches */
+  
   confidenceBoost: number;
-  /** Patterns that indicate this version bracket */
+  
   indicators: RegExp[];
-  /** Documentation sources specific to this version */
+  
   groundingSources: GroundingSource[];
 }
-
-// ---------------------------------------------------------------------------
-// React
-// ---------------------------------------------------------------------------
 
 export const REACT_ENTRY: FrameworkCapabilityEntry = {
   name: 'React',
@@ -189,8 +151,7 @@ export const NEXTJS_ENTRY: FrameworkCapabilityEntry = {
         /\bnotFound\s*\(\)|\bredirect\s*\(/,
       ],
       groundingSources: [
-        primaryDoc('Next.js App Router Docs', 'https://nextjs.org/docs/app', 'App Router (Next.js 13+) full reference'),
-        primaryDoc('Next.js Route Handlers', 'https://nextjs.org/docs/app/building-your-application/routing/route-handlers', 'API routes in App Router'),
+        primaryDoc('Next.js App Router Docs', 'https://nextjs.org/docs/app', 'App Router overview and reference'),
         primaryDoc('Server Components', 'https://nextjs.org/docs/app/building-your-application/rendering/server-components', 'React Server Components in Next.js'),
         secondaryDoc('Next.js 13 Migration', 'https://nextjs.org/docs/app/building-your-application/upgrading/app-router-migration', 'Pages → App Router migration'),
         secondaryDoc('Next.js Caching', 'https://nextjs.org/docs/app/building-your-application/caching', 'Caching behaviour in App Router'),
@@ -228,10 +189,6 @@ export const NEXTJS_ENTRY: FrameworkCapabilityEntry = {
     primaryDoc('Next.js Changelog', 'https://github.com/vercel/next.js/blob/canary/packages/next/CHANGELOG.md', 'Full Next.js release history'),
   ],
 };
-
-// ---------------------------------------------------------------------------
-// Express
-// ---------------------------------------------------------------------------
 
 export const EXPRESS_ENTRY: FrameworkCapabilityEntry = {
   name: 'Express',
@@ -350,7 +307,6 @@ export const VUE_ENTRY: FrameworkCapabilityEntry = {
       ],
       groundingSources: [
         primaryDoc('Vue 3 Documentation', 'https://vuejs.org/guide/introduction.html', 'Official Vue 3 guide'),
-        primaryDoc('Vue 3 Composition API', 'https://vuejs.org/api/composition-api-setup.html', 'Composition API reference'),
         secondaryDoc('Vue 3 Migration from Vue 2', 'https://v3-migration.vuejs.org/', 'Breaking changes from Vue 2'),
       ],
     },
@@ -382,10 +338,6 @@ export const VUE_ENTRY: FrameworkCapabilityEntry = {
   ],
 };
 
-// ---------------------------------------------------------------------------
-// NestJS
-// ---------------------------------------------------------------------------
-
 export const NESTJS_ENTRY: FrameworkCapabilityEntry = {
   name: 'NestJS',
   versionBrackets: [
@@ -400,8 +352,7 @@ export const NESTJS_ENTRY: FrameworkCapabilityEntry = {
         /\bINJECT_MODULE\b|\bModuleRef\b/,
       ],
       groundingSources: [
-        primaryDoc('NestJS Documentation', 'https://docs.nestjs.com', 'Official NestJS docs'),
-        primaryDoc('NestJS Migration (v9→v10)', 'https://docs.nestjs.com/migration-guide', 'Upgrading NestJS'),
+        primaryDoc('NestJS Documentation', 'https://docs.nestjs.com', 'Official NestJS reference'),
         secondaryDoc('NestJS Security', 'https://docs.nestjs.com/security/authentication', 'Auth and security in NestJS'),
       ],
     },
@@ -417,10 +368,6 @@ export const NESTJS_ENTRY: FrameworkCapabilityEntry = {
     primaryDoc('NestJS Changelog', 'https://github.com/nestjs/nest/releases', 'NestJS release history'),
   ],
 };
-
-// ---------------------------------------------------------------------------
-// FastAPI
-// ---------------------------------------------------------------------------
 
 export const FASTAPI_ENTRY: FrameworkCapabilityEntry = {
   name: 'FastAPI',
@@ -452,14 +399,6 @@ export const FASTAPI_ENTRY: FrameworkCapabilityEntry = {
   ],
 };
 
-// ---------------------------------------------------------------------------
-// Master registry
-// ---------------------------------------------------------------------------
-
-/**
- * The complete framework capability registry.
- * Keyed by framework name (must match FrameworkDetection.name exactly).
- */
 export const FRAMEWORK_REGISTRY: Record<string, FrameworkCapabilityEntry> = {
   'React': REACT_ENTRY,
   'Next.js': NEXTJS_ENTRY,
@@ -470,18 +409,10 @@ export const FRAMEWORK_REGISTRY: Record<string, FrameworkCapabilityEntry> = {
   'FastAPI': FASTAPI_ENTRY,
 };
 
-/**
- * Looks up a framework entry by name.
- * Returns undefined when the framework is not in the registry.
- */
 export function getFrameworkEntry(name: string): FrameworkCapabilityEntry | undefined {
   return FRAMEWORK_REGISTRY[name];
 }
 
-/**
- * Returns all API patterns across all registered frameworks.
- * Useful for initial scanning without knowing the framework yet.
- */
 export function getAllApiPatterns(): ApiPatternMatch[] {
   return Object.values(FRAMEWORK_REGISTRY).flatMap((e) =>
     e.apiPatterns,

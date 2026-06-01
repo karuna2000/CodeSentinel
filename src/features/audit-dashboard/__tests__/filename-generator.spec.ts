@@ -1,15 +1,12 @@
-/**
- * Tests for generateVirtualFilename — virtual filename generation for paste content.
- * Covers all language rules and the fallback.
- */
+
 
 import { describe, it, expect } from 'vitest';
 import { generateVirtualFilename } from '@/features/audit-dashboard/utils/filename-generator';
 
 describe('generateVirtualFilename', () => {
-  // ---------------------------------------------------------------------------
-  // SQL
-  // ---------------------------------------------------------------------------
+  
+  
+  
   it('detects SQL from SELECT statement', () => {
     const result = generateVirtualFilename('SELECT id, name FROM users WHERE active = 1;');
     expect(result.filename).toBe('pasted-query.sql');
@@ -22,9 +19,9 @@ describe('generateVirtualFilename', () => {
     expect(result.filename).toBe('pasted-query.sql');
   });
 
-  // ---------------------------------------------------------------------------
-  // JSON
-  // ---------------------------------------------------------------------------
+  
+  
+  
   it('detects JSON from object literal', () => {
     const result = generateVirtualFilename('{ "name": "John", "age": 30 }');
     expect(result.filename).toBe('pasted-data.json');
@@ -36,9 +33,9 @@ describe('generateVirtualFilename', () => {
     expect(result.filename).toBe('pasted-data.json');
   });
 
-  // ---------------------------------------------------------------------------
-  // Python
-  // ---------------------------------------------------------------------------
+  
+  
+  
   it('detects Python from def keyword', () => {
     const code = `def add(a, b):\n    return a + b\n\nprint(add(1, 2))`;
     const result = generateVirtualFilename(code);
@@ -51,9 +48,9 @@ describe('generateVirtualFilename', () => {
     expect(result.filename).toBe('pasted-input.py');
   });
 
-  // ---------------------------------------------------------------------------
-  // TypeScript
-  // ---------------------------------------------------------------------------
+  
+  
+  
   it('detects TypeScript from interface keyword', () => {
     const code = `interface User {\n  id: number;\n  name: string;\n}`;
     const result = generateVirtualFilename(code);
@@ -67,9 +64,9 @@ describe('generateVirtualFilename', () => {
     expect(result.filename).toBe('pasted-input.ts');
   });
 
-  // ---------------------------------------------------------------------------
-  // React/TSX
-  // ---------------------------------------------------------------------------
+  
+  
+  
   it('detects TSX from JSX component usage', () => {
     const code = `import React from 'react';\nreturn (\n  <Button variant="primary">Click me</Button>\n);`;
     const result = generateVirtualFilename(code);
@@ -77,9 +74,9 @@ describe('generateVirtualFilename', () => {
     expect(result.language).toBe('TypeScript / React');
   });
 
-  // ---------------------------------------------------------------------------
-  // JavaScript
-  // ---------------------------------------------------------------------------
+  
+  
+  
   it('detects JavaScript from const/arrow function', () => {
     const code = `const greet = (name) => {\n  console.log(\`Hello \${name}\`);\n};\nmodule.exports = { greet };`;
     const result = generateVirtualFilename(code);
@@ -93,9 +90,9 @@ describe('generateVirtualFilename', () => {
     expect(result.filename).toBe('pasted-input.js');
   });
 
-  // ---------------------------------------------------------------------------
-  // Go
-  // ---------------------------------------------------------------------------
+  
+  
+  
   it('detects Go from func keyword', () => {
     const code = `package main\n\nimport "fmt"\n\nfunc main() {\n  fmt.Println("Hello")\n}`;
     const result = generateVirtualFilename(code);
@@ -103,9 +100,9 @@ describe('generateVirtualFilename', () => {
     expect(result.language).toBe('Go');
   });
 
-  // ---------------------------------------------------------------------------
-  // Rust
-  // ---------------------------------------------------------------------------
+  
+  
+  
   it('detects Rust from fn keyword and println!', () => {
     const code = `fn main() {\n  let mut x = 5;\n  println!("{}", x);\n}`;
     const result = generateVirtualFilename(code);
@@ -113,9 +110,9 @@ describe('generateVirtualFilename', () => {
     expect(result.language).toBe('Rust');
   });
 
-  // ---------------------------------------------------------------------------
-  // Shell
-  // ---------------------------------------------------------------------------
+  
+  
+  
   it('detects shell script from shebang', () => {
     const code = `#!/bin/bash\necho "Hello"\nexport PATH=$PATH:/usr/local/bin`;
     const result = generateVirtualFilename(code);
@@ -123,9 +120,9 @@ describe('generateVirtualFilename', () => {
     expect(result.language).toBe('Shell');
   });
 
-  // ---------------------------------------------------------------------------
-  // HTML
-  // ---------------------------------------------------------------------------
+  
+  
+  
   it('detects HTML from DOCTYPE', () => {
     const code = `<!DOCTYPE html>\n<html>\n<head><title>Test</title></head>\n<body></body>\n</html>`;
     const result = generateVirtualFilename(code);
@@ -133,9 +130,9 @@ describe('generateVirtualFilename', () => {
     expect(result.language).toBe('HTML');
   });
 
-  // ---------------------------------------------------------------------------
-  // CSS
-  // ---------------------------------------------------------------------------
+  
+  
+  
   it('detects CSS from rule block', () => {
     const code = `.container {\n  display: flex;\n  align-items: center;\n  padding: 16px;\n}`;
     const result = generateVirtualFilename(code);
@@ -143,9 +140,9 @@ describe('generateVirtualFilename', () => {
     expect(result.language).toBe('CSS');
   });
 
-  // ---------------------------------------------------------------------------
-  // Fallback
-  // ---------------------------------------------------------------------------
+  
+  
+  
   it('falls back to pasted-snippet.txt for unrecognised content', () => {
     const result = generateVirtualFilename('This is some generic plain text content with no code patterns.');
     expect(result.filename).toBe('pasted-snippet.txt');

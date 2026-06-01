@@ -1,6 +1,4 @@
-/**
- * Tests for the Version Signal Extractor.
- */
+
 
 import { describe, it, expect } from 'vitest';
 import {
@@ -8,8 +6,6 @@ import {
   matchApiPatterns,
   findDeprecatedApis,
 } from '@/features/version-grounding/version-signal-extractor';
-
-// ─── React version inference ─────────────────────────────────────────────────
 
 describe('inferVersion — React 18 detection', () => {
   it('infers React 18 from useTransition', () => {
@@ -52,12 +48,10 @@ function Counter() {
   return <button onClick={() => setCount(c => c + 1)}>{count}</button>;
 }`;
     const result = inferVersion('React', code);
-    // useState exists in React 16+ so confidence in a specific version should be lower
+    
     expect(result.confidence).toBeLessThan(0.70);
   });
 });
-
-// ─── Next.js version inference ───────────────────────────────────────────────
 
 describe('inferVersion — Next.js detection', () => {
   it('infers Next.js App Router (13+) from "use client"', () => {
@@ -90,8 +84,6 @@ export default function Page({ data }) { return null; }`;
   });
 });
 
-// ─── Unknown framework ────────────────────────────────────────────────────────
-
 describe('inferVersion — unregistered framework', () => {
   it('returns low-confidence generic result for unknown frameworks', () => {
     const result = inferVersion('SomeObscureFramework', 'const x = 1;');
@@ -102,8 +94,6 @@ describe('inferVersion — unregistered framework', () => {
     expect(result.signals).toHaveLength(0);
   });
 });
-
-// ─── API pattern matching ─────────────────────────────────────────────────────
 
 describe('matchApiPatterns — React', () => {
   it('detects useTransition for React 18', () => {
@@ -141,8 +131,6 @@ import { useState } from 'react';`;
     expect(matches.some((m) => m.api === 'generateStaticParams()')).toBe(true);
   });
 });
-
-// ─── Deprecated API detection ────────────────────────────────────────────────
 
 describe('findDeprecatedApis', () => {
   it('flags ReactDOM.render as deprecated', () => {

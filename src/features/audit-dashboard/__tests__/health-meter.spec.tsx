@@ -1,12 +1,6 @@
-/**
- * Tests for HealthMeter component — prop rendering and defaults.
- * Uses vitest + a minimal render check (no full React DOM needed).
- */
+
 
 import { describe, it, expect } from 'vitest';
-
-// HealthMeter is a pure display component. We test its logic/defaults
-// without a full DOM renderer since vitest runs in node env.
 
 interface HealthMeterInputs {
   grade?: string;
@@ -14,7 +8,6 @@ interface HealthMeterInputs {
   status?: string;
 }
 
-// Helper: simulate what HealthMeter renders from given props
 function getHealthMeterValues({ grade = 'B+', score = 78, status = '⚠ Not prod-ready' }: HealthMeterInputs) {
   return { grade, score, status };
 }

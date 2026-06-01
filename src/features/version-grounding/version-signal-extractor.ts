@@ -1,38 +1,20 @@
-/**
- * Version Signal Extractor — infers framework/library versions from code patterns.
- *
- * Detection strategy:
- *  1. Explicit signals: inline version comments, config declarations
- *  2. API-pattern matching: specific hooks/methods tied to known versions
- *  3. Syntax/convention signals: routing conventions, directives
- *  4. Version bracket matching: from the framework registry
- *
- * Design:
- *  - Pure function, no side effects, no LLM calls
- *  - Uses the FRAMEWORK_REGISTRY for version brackets and API patterns
- *  - Returns a VersionInference with a label, range, confidence, and signals
- *  - Never pretends certainty — uses confidence < 0.65 threshold for clarification
- */
+
 
 import type { VersionInference, ApiPatternMatch } from '@/types/version-grounding';
 import { getFrameworkEntry, getAllApiPatterns } from './framework-registry';
-
-// ---------------------------------------------------------------------------
-// Explicit signal patterns (e.g. comments, pragma-style declarations)
-// ---------------------------------------------------------------------------
 
 const EXPLICIT_VERSION_PATTERNS: Array<{
   regex: RegExp;
   framework: string;
   extract: (match: RegExpMatchArray) => string | null;
 }> = [
-  // // @version 18.2.0  or  /* React ^18 */
+  
   {
     regex: /[@]version\s+([\d.^~>=<]+)/i,
     framework: 'explicit-comment',
     extract: (m) => m[1] ?? null,
   },
-  // engine field: "node": ">=18"
+  
   {
     regex: /"node"\s*:\s*"([^"]+)"/,
     framework: 'Node.js',

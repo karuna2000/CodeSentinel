@@ -1,13 +1,6 @@
-/**
- * Unit tests for src/lib/env.ts
- *
- * Tests that the env module correctly validates environment variables
- * and throws meaningful errors when required values are missing.
- */
+
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function withEnv(vars: Record<string, string | undefined>, fn: () => void) {
   const original: Record<string, string | undefined> = {};
@@ -29,13 +22,11 @@ function withEnv(vars: Record<string, string | undefined>, fn: () => void) {
   }
 }
 
-// ─── Tests ───────────────────────────────────────────────────────────────────
-
 describe('env validation', () => {
-  // Since env.ts runs at module load time, we test requireEnv logic independently
+  
   describe('requireEnv logic', () => {
     it('throws when a required env var is missing', () => {
-      // Simulate what requireEnv does
+      
       function requireEnv(key: string, env: Record<string, string | undefined>): string {
         const value = env[key];
         if (!value || value.trim() === '') {

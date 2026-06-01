@@ -1,15 +1,6 @@
 import type { CodeUnderstandingOutput } from '@/types/code-understanding';
 import type { ReasoningContext } from '@/types/llm-reasoning';
 
-/**
- * Builds the structured context provided to the LLM for reasoning.
- * This function extracts key signals from the deterministic understanding
- * and version grounding layers, avoiding sending excessive raw data.
- *
- * @param understanding The output from the Code Understanding Agent (which includes versionGrounding)
- * @param content The raw code content to analyze
- * @returns A structured ReasoningContext object
- */
 export function buildReasoningContext(
   understanding: CodeUnderstandingOutput,
   content: string
@@ -19,20 +10,20 @@ export function buildReasoningContext(
   const groundingSources: string[] = [];
 
   if (understanding.versionGrounding) {
-    // Extract version inferences
+    
     for (const fw of understanding.versionGrounding.frameworks) {
       if (fw.versionInference.label) {
         versionInferences.push(`${fw.framework}: ${fw.versionInference.label}`);
       }
     }
 
-    // Extract API patterns
+    
     for (const pattern of understanding.versionGrounding.detectedApiPatterns) {
       const deprecation = pattern.deprecatedInVersion ? ` (DEPRECATED in ${pattern.deprecatedInVersion})` : '';
       apiPatterns.push(`[${pattern.framework}] ${pattern.api} (Introduced: ${pattern.introducedInVersion})${deprecation} - ${pattern.description}`);
     }
 
-    // Extract grounding sources
+    
     for (const source of understanding.versionGrounding.groundingSources) {
       groundingSources.push(`${source.label} - ${source.url} (${source.purpose})`);
     }
@@ -52,9 +43,6 @@ export function buildReasoningContext(
   };
 }
 
-/**
- * Formats the ReasoningContext into a readable string for inclusion in the LLM prompt.
- */
 export function formatContextForPrompt(context: ReasoningContext): string {
   return `[DETERMINISTIC UNDERSTANDING]
 Summary: ${context.understandingSummary}

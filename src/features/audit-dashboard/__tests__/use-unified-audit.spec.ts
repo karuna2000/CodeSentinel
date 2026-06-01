@@ -1,31 +1,16 @@
-/**
- * Tests for the useUnifiedAudit store actions (pure store layer, no React rendering).
- * Tests cover setPayloadFromFile, setPayloadFromText, and reset.
- */
+
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { appStore } from '@/stores/app.store';
+import { appStore, resetStoreForTesting } from '@/stores/app.store';
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Reset store to clean state before each test */
 function resetStore() {
-  appStore.setState({
-    inputPayload: null,
-    processingResult: null,
-    processingState: 'idle',
-    validationError: null,
-  });
+  resetStoreForTesting();
 }
 
-/** Build a minimal File mock for testing without a real browser environment */
 function makeTextFile(content: string, filename: string, type = 'text/plain'): File {
   return new File([content], filename, { type });
 }
 
-/** FileReader mock factory — resolves onload with the given text */
 function makeFileReaderMock(resolvedText: string) {
   return class MockFileReader {
     result: string | null = null;
@@ -39,12 +24,6 @@ function makeFileReaderMock(resolvedText: string) {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Import the actions directly from the hook module (pure function style)
-// ---------------------------------------------------------------------------
-// Since the hook uses React internals (useState/useEffect) we test the store
-// actions by invoking the underlying pipeline functions directly.
-
 import { processPayload } from '@/features/audit-dashboard/services/audit-engine';
 import { normalizePayload } from '@/features/audit-dashboard/utils/payload-scrubber';
 import {
@@ -52,10 +31,6 @@ import {
   validateFileType,
   validatePasteContent,
 } from '@/lib/validation';
-
-// ---------------------------------------------------------------------------
-// Store state tests
-// ---------------------------------------------------------------------------
 
 describe('appStore — initial state', () => {
   beforeEach(resetStore);
@@ -77,10 +52,6 @@ describe('appStore — initial state', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Pipeline integration: validateFileSize → validateFileType → normalise → process
-// ---------------------------------------------------------------------------
-
 describe('pipeline — file ingestion flow', () => {
   beforeEach(() => {
     resetStore();
@@ -89,7 +60,7 @@ describe('pipeline — file ingestion flow', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('rejects an oversized file at the validation stage', () => {
-    // 6MB file — exceeds 5MB MAX_UPLOAD_BYTES
+    
     const bigContent = 'x'.repeat(6 * 1024 * 1024);
     const file = makeTextFile(bigContent, 'big.ts');
     const sizeCheck = validateFileSize(file);
@@ -99,7 +70,7 @@ describe('pipeline — file ingestion flow', () => {
 
   it('rejects an unsupported file type', () => {
     const file = makeTextFile('binary data', 'photo.png', 'image/png');
-    // Size is fine, but type is not
+    
     const sizeCheck = validateFileSize(file);
     expect(sizeCheck.valid).toBe(true);
     const typeCheck = validateFileType(file);
@@ -127,10 +98,6 @@ describe('pipeline — file ingestion flow', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Pipeline integration: paste/text ingestion
-// ---------------------------------------------------------------------------
-
 describe('pipeline — paste ingestion flow', () => {
   beforeEach(resetStore);
 
@@ -153,17 +120,13 @@ describe('pipeline — paste ingestion flow', () => {
   });
 
   it('rejects content exceeding MAX_PASTE_BYTES', () => {
-    // 2MB of code characters — exceeds 1MB limit
+    
     const hugeCode = 'const x = 1;\n'.repeat(150000);
     const check = validatePasteContent(hugeCode);
     expect(check.valid).toBe(false);
     expect(check.error).toContain('too large');
   });
 });
-
-// ---------------------------------------------------------------------------
-// appStore — subscriber notification
-// ---------------------------------------------------------------------------
 
 describe('appStore — subscriber pattern', () => {
   beforeEach(resetStore);

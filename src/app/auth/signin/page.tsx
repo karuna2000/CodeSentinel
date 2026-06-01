@@ -11,10 +11,6 @@ interface SignInPageProps {
   searchParams: SearchParams;
 }
 
-/**
- * Server Component wrapper — reads error param from URL, renders Client View.
- * URL shape: /auth/signin?error=OAuthAccountNotLinked&callbackUrl=/
- */
 export default async function SignInPage({ searchParams }: SignInPageProps) {
   const params = await searchParams;
   const error = typeof params?.error === 'string' ? params.error : undefined;

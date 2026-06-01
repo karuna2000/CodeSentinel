@@ -1,7 +1,4 @@
-/**
- * Tests for the audit engine (processPayload).
- * Covers: code line parsing, HTML escaping, pin initialisation, metadata pass-through.
- */
+
 
 import { describe, it, expect } from 'vitest';
 import { processPayload } from '@/features/audit-dashboard/services/audit-engine';
@@ -20,9 +17,6 @@ function makePayload(code: string, filename = 'auth.service.ts') {
   return normalizePayload(code, filename, 'file-upload');
 }
 
-// ---------------------------------------------------------------------------
-// processPayload — code lines
-// ---------------------------------------------------------------------------
 describe('processPayload — codeLines', () => {
   it('produces one CodeLine per line of the source content', () => {
     const payload = makePayload(SAMPLE_CODE);
@@ -77,9 +71,6 @@ describe('processPayload — codeLines', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// processPayload — pins
-// ---------------------------------------------------------------------------
 describe('processPayload — pins', () => {
   it('returns an empty pins object (AI enrichment stage pending)', () => {
     const payload = makePayload(SAMPLE_CODE);
@@ -89,9 +80,6 @@ describe('processPayload — pins', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// processPayload — metadata pass-through
-// ---------------------------------------------------------------------------
 describe('processPayload — metadata', () => {
   it('passes the original payload reference through unchanged', () => {
     const payload = makePayload(SAMPLE_CODE);

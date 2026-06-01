@@ -1,39 +1,17 @@
-/**
- * Application-level input store — centralised state for the real ingestion pipeline.
- *
- * Uses a module-level singleton with a subscriber pattern (no external state library
- * dependencies required — works with React's built-in hooks).
- *
- * State:
- *  - inputPayload      The normalised input payload from the user
- *  - processingResult  The output of the audit engine
- *  - processingState   Lifecycle state of the current processing run
- *  - validationError   Set when validation fails; cleared on new input
- *
- * Actions (exposed via useAppStore / useUnifiedAudit):
- *  - setPayloadFromFile(file)  Reads, validates, normalises a File
- *  - setPayloadFromText(text)  Validates, normalises pasted/typed text
- *  - reset()                   Clears all state back to idle
- */
+
 
 import type { InputPayload, ProcessingResult, ProcessingState } from '@/types/audit';
 
-// ---------------------------------------------------------------------------
-// Store shape
-// ---------------------------------------------------------------------------
-
 export interface AppStoreState {
+  stagedPayload: InputPayload | null;
   inputPayload: InputPayload | null;
   processingResult: ProcessingResult | null;
   processingState: ProcessingState;
   validationError: string | null;
 }
 
-// ---------------------------------------------------------------------------
-// Singleton state
-// ---------------------------------------------------------------------------
-
 let _state: AppStoreState = {
+  stagedPayload: null,
   inputPayload: null,
   processingResult: null,
   processingState: 'idle',
@@ -60,8 +38,15 @@ function subscribe(listener: Listener): () => void {
   return () => _listeners.delete(listener);
 }
 
-// ---------------------------------------------------------------------------
-// Exported store object
-// ---------------------------------------------------------------------------
+export function resetStoreForTesting(): void {
+  _state = {
+    stagedPayload: null,
+    inputPayload: null,
+    processingResult: null,
+    processingState: 'idle',
+    validationError: null,
+  };
+  _listeners.clear();
+}
 
 export const appStore = { getState, setState, subscribe };

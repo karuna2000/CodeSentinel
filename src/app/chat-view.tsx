@@ -1,31 +1,40 @@
 "use client";
 
 import React, { useState } from "react";
-import { VirtualizedChatList, type VirtualItemData } from "@/features/audit-dashboard/components/virtualized-chat-list";
+import { VirtualizedChatList } from "@/features/audit-dashboard/components/virtualized-chat-list";
 import { EmptyState } from "@/features/audit-dashboard/components/empty-state";
 import { ChatInput } from "@/features/audit-dashboard/components/chat-input";
 import { FindingBubble } from "@/features/contextual-explainer/components/finding-bubble";
 import { CodePanel } from "@/features/contextual-explainer/components/code-panel";
 import { InputArtifactCard } from "@/features/contextual-explainer/components/input-artifact-card";
 import { TimelineNode } from "@/features/audit-dashboard/components/timeline-node";
+import { ChatFollowUpMessage } from "@/features/contextual-explainer/components/chat-follow-up-message";
 import { UserAvatar } from "@/features/auth/components/user-avatar";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { NetworkStatusIndicator } from "@/components/ui/network-status-indicator";
 import { useUnifiedAudit } from "@/features/audit-dashboard/hooks/use-unified-audit";
+import { useFindingChat } from "@/features/audit-dashboard/hooks/use-finding-chat";
 import { appStore } from "@/stores/app.store";
 import { artifactFromProcessingResult } from "@/types/artifact";
-import { isLikelyCodeOrTechContent } from "@/lib/validation";
+import { generateVirtualFilename } from "@/features/audit-dashboard/utils/filename-generator";
+import { isTextUIPart } from "ai";
 import { experimental_useObject } from "@ai-sdk/react";
 import { ReasoningOutputSchema } from "@/types/llm-reasoning";
+import { computeScore } from "@/features/audit-dashboard/utils/scoring";
+import { extractLineFromEvidence, buildCodeSnippet } from "@/features/audit-dashboard/utils/finding-utils";
+import { FEATURE_FLAGS } from "@/config/app.config";
+import { processPayload } from "@/features/audit-dashboard/services/audit-engine";
+import { PatternConfirmationBubble } from "@/features/audit-dashboard/components/pattern-confirmation-bubble";
 import type { CodePin } from "@/features/contextual-explainer/components/code-panel";
-import type { Finding } from "@/types/llm-reasoning";
-import type { ProcessingResult } from "@/types/audit";
+import type { Finding, ReasoningOutput, ChatFindingContext } from "@/types/llm-reasoning";
+import type { ProcessingResult, CodeLine } from "@/types/audit";
 
 interface StreamingTimelineNodeProps {
   initialResult: ProcessingResult;
   onLineClick?: (line: number) => void;
   onActiveStreamChange?: (loading: boolean, stopFn: (() => void) | null) => void;
-  onReasoningComplete?: (reasoning: any) => void;
+  onReasoningComplete?: (reasoning: ReasoningOutput) => void;
+  onAskFollowUp?: (id: string, title: string, finding: Finding, codeLines: CodeLine[]) => void;
 }
 
 export function StreamingTimelineNode({
@@ -33,6 +42,7 @@ export function StreamingTimelineNode({
   onLineClick,
   onActiveStreamChange,
   onReasoningComplete,
+  onAskFollowUp,
 }: StreamingTimelineNodeProps) {
   const { object: streamedReasoning, submit, isLoading: isReasoning, stop } = experimental_useObject({
     api: "/api/audit/reason",
@@ -46,11 +56,19 @@ export function StreamingTimelineNode({
 
   const hasSubmitted = React.useRef(false);
   React.useEffect(() => {
+    // Prevent re-triggering the API if this request has already been executed.
+    // (This happens when the virtualized list re-mounts old items after scrolling).
+    if (initialResult.reasoning) {
+      return;
+    }
+
     if (initialResult.codeUnderstanding && !hasSubmitted.current) {
       hasSubmitted.current = true;
       submit({
         understanding: initialResult.codeUnderstanding,
         content: initialResult.payload.content,
+        task: initialResult.payload.userContext,
+        correction: initialResult.payload.userCorrection,
       });
     }
   }, [initialResult, submit]);
@@ -80,7 +98,7 @@ export function StreamingTimelineNode({
     }
   }, [streamedReasoningStr]);
 
-  const findings = streamedReasoning?.findings ?? initialResult.reasoning?.findings ?? [];
+  const findings: Finding[] = (streamedReasoning?.findings ?? initialResult.reasoning?.findings ?? []) as Finding[];
   const filename = initialResult.payload.filename;
   const lines = initialResult.payload.lineCount;
   const language = initialResult.payload.language;
@@ -107,58 +125,24 @@ export function StreamingTimelineNode({
 
   const filteredFindings = React.useMemo(() => {
     if (!activeCategory) return findings;
-    return findings.filter((f: any) => {
+    return findings.filter((f: Finding) => {
       const cat = f.category === "security" ? "sec" :
                   f.category === "scalability" || f.category === "performance" ? "scale" : "arch";
       return cat === activeCategory;
     });
   }, [findings, activeCategory]);
 
-  // Compute counts dynamically
   const archCount = findings.filter(
-    (f: any) => f?.category === "architecture" || f?.category === "maintainability"
+    (f: Finding) => f.category === "architecture" || f.category === "maintainability" || f.category === "general"
   ).length;
-  const secCount = findings.filter((f: any) => f?.category === "security").length;
+  const secCount = findings.filter((f: Finding) => f.category === "security").length;
   const scaleCount = findings.filter(
-    (f: any) => f?.category === "scalability" || f?.category === "performance"
+    (f: Finding) => f.category === "scalability" || f.category === "performance"
   ).length;
 
-  // Dynamic Health Score computation
-  const baseScore = 100;
-  const totalDeduction = findings.reduce((acc: number, f: any) => {
-    if (f?.severity === "critical") return acc + 25;
-    if (f?.severity === "high") return acc + 15;
-    if (f?.severity === "medium") return acc + 8;
-    return acc + 3; // low
-  }, 0);
-  const score = Math.max(10, baseScore - totalDeduction);
+  const { score, grade, status } = computeScore(findings, isReasoning);
 
-  let grade = "A";
-  let status = "✅ Looks clean";
-  if (findings.length === 0) {
-    grade = "—";
-    status = isReasoning ? "⚡ Analyzing..." : "Waiting for results";
-  } else if (score >= 95) {
-    grade = "A";
-    status = "✅ Looks great";
-  } else if (score >= 90) {
-    grade = "A-";
-    status = "✅ Looks clean";
-  } else if (score >= 80) {
-    grade = "B+";
-    status = "⚠️ Review recommended";
-  } else if (score >= 70) {
-    grade = "B";
-    status = "⚠️ Not production-ready";
-  } else if (score >= 50) {
-    grade = "C";
-    status = "🚨 Needs refactoring";
-  } else {
-    grade = "D";
-    status = "🚨 Critical vulnerabilities";
-  }
-
-  // Calculate indicator widths
+  
   const archWidth = archCount > 0 ? `${Math.min(100, (archCount / 5) * 100)}%` : "0%";
   const secWidth = secCount > 0 ? `${Math.min(100, (secCount / 5) * 100)}%` : "0%";
   const scaleWidth = scaleCount > 0 ? `${Math.min(100, (scaleCount / 5) * 100)}%` : "0%";
@@ -198,7 +182,7 @@ export function StreamingTimelineNode({
             )}
           </div>
 
-          {/* Real-time Metrics Card */}
+          {}
           <div className="bg-[var(--bg)] border border-[var(--border)] rounded-[8px] p-[12px_14px] flex flex-col gap-[8px]">
             <div className="font-code text-[11px] text-[var(--muted)] flex items-center justify-between pb-[8px] border-b border-[var(--border)]">
               <div className="flex items-center gap-[6px]">
@@ -250,7 +234,7 @@ export function StreamingTimelineNode({
             </div>
           </div>
 
-          {/* Progressive Findings List */}
+          {}
           <div className="flex flex-col gap-[8px] mt-[4px]">
             <div className="font-hd text-[12px] font-bold text-[var(--text)] flex items-center gap-[8px]">
               Review Findings ({findings.length})
@@ -307,65 +291,22 @@ export function StreamingTimelineNode({
                 {findings.length === 0 ? "Waiting for the first finding to stream..." : "No findings in this category."}
               </div>
             ) : (
-              filteredFindings.map((f: any, index: number) => {
+              filteredFindings.map((f: Finding, index: number) => {
                 const categoryLabel = f.category === "security" ? "Security" :
                                       f.category === "scalability" || f.category === "performance" ? "Scalability" : "Architectural";
                 const categoryKey = f.category === "security" ? "sec" :
                                     f.category === "scalability" || f.category === "performance" ? "scale" : "arch";
-                const severityLabel = f.severity?.toUpperCase() || "UNKNOWN";
-                
-                // Extract line number if possible
-                let foundLine: number | null = null;
-                for (const ev of (f.evidence || [])) {
-                  const lineMatch = ev.match(/(?:line|L)\s*(\d+)/i) || ev.match(/^(\d+)$/);
-                  if (lineMatch) {
-                    foundLine = parseInt(lineMatch[1], 10);
-                    break;
-                  }
-                }
+                const severityLabel = (f.severity || "info").toUpperCase();
 
-                if (!foundLine && initialResult.codeLines.length > 0) {
-                  for (const ev of (f.evidence || [])) {
-                    if (ev.length > 5) {
-                      const matchedLine = initialResult.codeLines.find((l: any) => {
-                        const normCode = l.code.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").toLowerCase();
-                        return normCode.includes(ev.toLowerCase());
-                      });
-                      if (matchedLine) {
-                        foundLine = matchedLine.num;
-                        break;
-                      }
-                    }
-                  }
-                }
-
-                let beforeCodeSnippet = "";
-                if (foundLine && initialResult.codeLines.length > 0) {
-                  const idx = initialResult.codeLines.findIndex((l: any) => l.num === foundLine);
-                  if (idx !== -1) {
-                    const startIdx = Math.max(0, idx - 1);
-                    const endIdx = Math.min(initialResult.codeLines.length - 1, idx + 1);
-                    beforeCodeSnippet = initialResult.codeLines
-                      .slice(startIdx, endIdx + 1)
-                      .map((l: any) => l.code
-                        .replace(/&amp;/g, "&")
-                        .replace(/&lt;/g, "<")
-                        .replace(/&gt;/g, ">")
-                        .replace(/&quot;/g, '"')
-                        .replace(/&#39;/g, "'")
-                      )
-                      .join('\n');
-                  }
-                } else if ((f.evidence || []).length > 0) {
-                  beforeCodeSnippet = f.evidence!.join('\n');
-                }
+                const foundLine = extractLineFromEvidence(f.evidence ?? [], initialResult.codeLines);
+                const beforeCodeSnippet = buildCodeSnippet(foundLine, f.evidence ?? [], initialResult.codeLines);
 
                 return (
                   <div key={`f-${index}`} className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                     <FindingBubble
                       id={`f-${index}`}
                       category={categoryKey}
-                      severity={f.severity}
+                      severity={f.severity || "info"}
                       tag={categoryLabel}
                       severityLabel={severityLabel}
                       title={f.title}
@@ -373,7 +314,11 @@ export function StreamingTimelineNode({
                       beforeCode={beforeCodeSnippet}
                       afterCode={f.recommendation}
                       line={foundLine ?? undefined}
-                      onAskFollowUp={() => {}}
+                      onAskFollowUp={(id, title) =>
+                        onAskFollowUp
+                          ? onAskFollowUp(id, title, f, initialResult.codeLines)
+                          : onLineClick?.(foundLine ?? 1)
+                      }
                       onLineClick={onLineClick}
                     />
                   </div>
@@ -392,8 +337,10 @@ export default function Page() {
     processingResult,
     processingState,
     validationError,
+    stagedPayload,
     setPayloadFromFile,
     setPayloadFromText,
+    confirmAndAnalyze,
     reset,
     isProcessing,
   } = useUnifiedAudit();
@@ -407,14 +354,20 @@ export default function Page() {
   }, []);
 
   const [chatStarted, setChatStarted] = useState(false);
-  type ChatMessageData = 
-    | { type: 'text', id: string, role: 'user' | 'ai', content: string }
-    | { type: 'user-artifact', id: string, result: ProcessingResult }
-    | { type: 'review-request', id: string, result: ProcessingResult };
+  type ChatMessageData =
+    | { type: 'text'; id: string; role: 'user' | 'ai'; content: string; timestamp: string }
+    | { type: 'user-artifact'; id: string; result: ProcessingResult; timestamp: string }
+    | { type: 'review-request'; id: string; result: ProcessingResult; timestamp: string }
+    | { type: 'pattern-confirmation'; id: string; result: ProcessingResult; taskContext: string; timestamp: string }
+    | { type: 'ai-chat'; id: string; content: string; isStreaming: boolean; timestamp: string };
   const [messages, setMessages] = useState<ChatMessageData[]>([]);
   const [isTyping, setIsTyping] = useState(false);
 
-  // Code Panel State
+  // ── Follow-up chat state ─────────────────────────────────────────────────
+  const [activeFinding, setActiveFinding] = useState<ChatFindingContext | null>(null);
+  const findingChat = useFindingChat({ activeFinding });
+
+  
   const [isCodePanelOpen, setIsCodePanelOpen] = useState(false);
   const [activeLine, setActiveLine] = useState<number | null>(null);
   const [activeCodeResult, setActiveCodeResult] = useState<ProcessingResult | null>(null);
@@ -436,11 +389,14 @@ export default function Page() {
     setIsCodePanelOpen(true);
   }, []);
 
+  const nowTimestamp = () =>
+    new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
   const appendUserArtifact = React.useCallback((freshResult: ProcessingResult) => {
     const id = "ua-" + freshResult.payload.filename + Date.now();
     setMessages((prev) => [
       ...prev,
-      { type: 'user-artifact', id, result: freshResult }
+      { type: 'user-artifact', id, result: freshResult, timestamp: nowTimestamp() },
     ]);
     setIsTyping(false);
   }, []);
@@ -449,37 +405,137 @@ export default function Page() {
     const id = "rr-" + freshResult.payload.filename + Date.now();
     setMessages((prev) => [
       ...prev,
-      { type: 'review-request', id, result: freshResult }
+      { type: 'review-request', id, result: freshResult, timestamp: nowTimestamp() },
     ]);
   }, []);
+
+  const handleConfirmPattern = React.useCallback((messageId: string, result: ProcessingResult, taskContext: string, correction?: string) => {
+    confirmAndAnalyze(result.payload, taskContext, correction, (res) => {
+      // Replace the pattern-confirmation bubble with the actual artifact
+      setMessages((prev) => {
+        const filtered = prev.filter(m => m.id !== messageId);
+        return [
+          ...filtered,
+          { type: 'user-artifact', id: "ua-" + res.payload.filename + Date.now(), result: res, timestamp: nowTimestamp() },
+        ];
+      });
+      setIsTyping(false);
+    }).then((res) => {
+      if (res) appendReviewRequest(res);
+    });
+  }, [confirmAndAnalyze, appendReviewRequest]);
 
   const handleSend = React.useCallback((text: string) => {
     if (!chatStarted) {
       setChatStarted(true);
     }
 
-    if (text.length >= 50 && isLikelyCodeOrTechContent(text)) {
-      setPayloadFromText(text, undefined, (result) => {
-        appendUserArtifact(result);
-      }).then((result) => {
-        if (result) appendReviewRequest(result);
+    const { stagedPayload } = appStore.getState();
+    if (stagedPayload) {
+      const result = processPayload(stagedPayload);
+      const id = "pc-" + stagedPayload.filename + Date.now();
+      setMessages((prev) => [
+        ...prev,
+        { type: 'pattern-confirmation', id, result, taskContext: text, timestamp: nowTimestamp() },
+      ]);
+      appStore.setState({ stagedPayload: null });
+      return;
+    }
+
+    // If it looks like code, run a full review instead of a follow-up
+    const virtualFile = generateVirtualFilename(text);
+    
+    // Explicitly block unsupported code from reaching the chat LLM
+    if (text.length >= 50 && virtualFile.isUnsupportedCode) {
+      appStore.setState({
+        validationError: `You pasted ${virtualFile.language} code, but CodeSintler only supports JavaScript and TypeScript.`,
+      });
+      return; // Stop execution
+    }
+
+    // If it is supported code, run a full review instead of a follow-up
+    if (text.length >= 50 && virtualFile.isSupportedCode) {
+      setPayloadFromText(text, undefined).then(() => {
+        const state = appStore.getState();
+        if (state.stagedPayload) {
+          const result = processPayload(state.stagedPayload);
+          const id = "pc-" + state.stagedPayload.filename + Date.now();
+          setMessages((prev) => [
+            ...prev,
+            { type: 'pattern-confirmation', id, result, taskContext: "", timestamp: nowTimestamp() },
+          ]);
+          appStore.setState({ stagedPayload: null });
+        }
       });
       return;
     }
 
-    setMessages((prev) => [...prev, { type: 'text', id: `text-${Date.now()}`, role: 'user', content: text }]);
-    
-    // Simulate generic AI response for normal chat
-    setIsTyping(true);
-    setTimeout(() => {
-      setMessages((prev) => [...prev, { type: 'text', id: `resp-${Date.now()}`, role: 'ai', content: "I can only review code at the moment. Please paste a valid code snippet or upload a file!" }]);
-      setIsTyping(false);
-    }, 1200);
-  }, [chatStarted, setPayloadFromText, appendUserArtifact, appendReviewRequest]);
+    // ── LLM follow-up chat ─────────────────────────────────────────────────
+    const ts = nowTimestamp();
+    const aiMsgId = `ai-chat-${Date.now()}`;
+
+    // Append the user message + an empty streaming AI bubble to the visible timeline
+    setMessages((prev) => [
+      ...prev,
+      { type: 'text', id: `text-${Date.now()}`, role: 'user', content: text, timestamp: ts },
+      { type: 'ai-chat', id: aiMsgId, content: '', isStreaming: true, timestamp: nowTimestamp() },
+    ]);
+
+    // Submit to the AI SDK chat hook (uses v6 sendMessage with {text} format)
+    findingChat.sendMessage({ text });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatStarted, setPayloadFromText, appendUserArtifact, appendReviewRequest, findingChat.sendMessage]);
+
+  // Sync the last streaming AI message back into our visible messages array
+  React.useEffect(() => {
+    const sdkMessages = findingChat.messages;
+    if (sdkMessages.length === 0) return;
+
+    const lastMsg = sdkMessages[sdkMessages.length - 1];
+    if (lastMsg.role !== 'assistant') return;
+
+    setMessages((prev) => {
+      const idx = [...prev].reverse().findIndex((m) => m.type === 'ai-chat');
+      if (idx === -1) return prev;
+      const realIdx = prev.length - 1 - idx;
+      const updated = [...prev];
+      // In v6 UIMessage, text lives in parts where part.type === 'text'
+      const textContent = lastMsg.parts
+        ?.filter(isTextUIPart)
+        .map((p) => p.text)
+        .join('') ?? '';
+      updated[realIdx] = {
+        ...(updated[realIdx] as Extract<ChatMessageData, { type: 'ai-chat' }>),
+        content: textContent,
+        isStreaming: findingChat.status === 'streaming' || findingChat.status === 'submitted',
+      };
+      return updated;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [findingChat.messages, findingChat.status]);
 
   const handlePinClick = React.useCallback((id: string) => {
     handleSend(`Tell me more about finding ${id}`);
   }, [handleSend]);
+
+  /** Called when user clicks '💬 Ask follow-up' on a FindingBubble */
+  const handleAskFollowUp = React.useCallback((id: string, title: string, finding: Finding, codeLines: CodeLine[]) => {
+    const foundLine = extractLineFromEvidence(finding.evidence ?? [], codeLines);
+    const snippet = buildCodeSnippet(foundLine, finding.evidence ?? [], codeLines);
+
+    setActiveFinding({
+      id,
+      title: finding.title,
+      category: finding.category,
+      severity: finding.severity ?? 'info',
+      explanation: finding.explanation,
+      recommendation: finding.recommendation,
+      evidence: finding.evidence ?? [],
+      codeSnippet: snippet || undefined,
+    });
+
+    handleSend(`Can you explain the "${title}" finding in more detail and show me how to fix it?`);
+  }, [handleSend, setActiveFinding]);
 
   const handleCloseCodePanel = React.useCallback(() => {
     setIsCodePanelOpen(false);
@@ -500,63 +556,29 @@ export default function Page() {
     if (!chatStarted) {
       setChatStarted(true);
     }
-    setPayloadFromFile(file, (result) => {
-      appendUserArtifact(result);
-    }).then((result) => {
-      if (result) appendReviewRequest(result);
-    });
-  }, [chatStarted, setPayloadFromFile, appendUserArtifact, appendReviewRequest]);
+    setPayloadFromFile(file);
+  }, [chatStarted, setPayloadFromFile]);
 
   const handleNewReview = () => {
     setChatStarted(false);
     setIsCodePanelOpen(false);
     setMessages([]);
+    setActiveFinding(null);
+    findingChat.setMessages([]);
     reset();
   };
 
-  // Dynamically generate pins from reasoning findings in real-time!
+  
   const findings = React.useMemo(() => activeResult?.reasoning?.findings ?? [], [activeResult?.reasoning?.findings]);
 
   const dynamicPins = React.useMemo(() => {
     if (!activeResult) return {};
-    const pins = { ...activeResult.pins };
+    const pins: Record<number, CodePin> = { ...activeResult.pins };
 
-    findings.forEach((finding: any, index: number) => {
-      const severity = finding.severity === "critical" ? "critical" :
-                       finding.severity === "high" ? "high" :
-                       finding.severity === "medium" ? "medium" : "low";
-      
-      // Heuristic 1: Look for "line X" or "L X" or "X" in evidence array
-      let foundLine: number | null = null;
-      for (const ev of (finding.evidence || [])) {
-        const lineMatch = ev.match(/(?:line|L)\s*(\d+)/i) || ev.match(/^(\d+)$/);
-        if (lineMatch) {
-          foundLine = parseInt(lineMatch[1], 10);
-          break;
-        }
-      }
-
-      // Heuristic 2: If no direct line match, search codeLines for evidence snippet
-      if (!foundLine && codeLines.length > 0) {
-        for (const ev of (finding.evidence || [])) {
-          if (ev.length > 5) {
-            const matchedLine = codeLines.find(l => {
-              const normCode = l.code.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").toLowerCase();
-              return normCode.includes(ev.toLowerCase());
-            });
-            if (matchedLine) {
-              foundLine = matchedLine.num;
-              break;
-            }
-          }
-        }
-      }
-
+    (findings as Finding[]).forEach((finding, index) => {
+      const foundLine = extractLineFromEvidence(finding.evidence ?? [], codeLines);
       if (foundLine) {
-        pins[foundLine] = {
-          severity,
-          id: `f-${index}`,
-        };
+        pins[foundLine] = { severity: finding.severity, id: `f-${index}` };
       }
     });
     return pins;
@@ -566,7 +588,7 @@ export default function Page() {
     <div className="flex flex-col h-screen overflow-hidden relative">
       <NetworkStatusIndicator />
       
-      {/* TOPBAR */}
+      {}
       <header className="h-[52px] bg-[var(--text)] flex items-center px-[20px] gap-[14px] shrink-0 border-b border-[var(--border)]">
         <div className="font-hd font-black text-[17px] text-[var(--bg)] tracking-[-0.01em] flex items-center gap-[10px]">
           AR <span className="bg-[var(--accent)] text-white font-code text-[9px] font-semibold px-[7px] py-[2px] rounded-[3px] tracking-[0.08em] uppercase">Chat</span>
@@ -578,21 +600,23 @@ export default function Page() {
           <button className="bg-[rgba(245,240,232,0.1)] border border-[rgba(245,240,232,0.18)] text-[rgba(245,240,232,0.75)] font-code text-[11px] px-[12px] py-[5px] rounded-[5px] cursor-pointer transition-all duration-150 hover:bg-[rgba(245,240,232,0.2)] hover:text-[var(--bg)]" onClick={handleNewReview}>
             + New Review
           </button>
-          <button className="bg-[rgba(245,240,232,0.1)] border border-[rgba(245,240,232,0.18)] text-[rgba(245,240,232,0.75)] font-code text-[11px] px-[12px] py-[5px] rounded-[5px] cursor-pointer transition-all duration-150 hover:bg-[rgba(245,240,232,0.2)] hover:text-[var(--bg)]">
-            Export PDF
-          </button>
+          {FEATURE_FLAGS.exportPdf && (
+            <button className="bg-[rgba(245,240,232,0.1)] border border-[rgba(245,240,232,0.18)] text-[rgba(245,240,232,0.75)] font-code text-[11px] px-[12px] py-[5px] rounded-[5px] cursor-pointer transition-all duration-150 hover:bg-[rgba(245,240,232,0.2)] hover:text-[var(--bg)]">
+              Export PDF
+            </button>
+          )}
           <UserAvatar />
         </div>
       </header>
 
-      {/* VALIDATION ERROR BANNER */}
+      {}
       {validationError && (
         <div className="bg-[#fff0ed] text-[var(--danger)] border-b border-[var(--danger)] px-[20px] py-[8px] font-code text-[11px] flex items-center gap-[8px]">
           <span>⚠️</span> {validationError}
         </div>
       )}
 
-        {/* SHELL */}
+        {}
         <div className="flex-1 flex overflow-hidden min-h-0">
 
         <div className="flex-1 flex flex-col overflow-hidden min-w-0 transition-all duration-300">
@@ -616,7 +640,7 @@ export default function Page() {
                     return (
                       <TimelineNode
                         role={item.data.role}
-                        timestamp={new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        timestamp={item.data.timestamp}
                         content={item.data.content}
                       />
                     );
@@ -629,7 +653,7 @@ export default function Page() {
                     return (
                       <TimelineNode
                         role="user"
-                        timestamp={new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        timestamp={item.data.timestamp}
                         content={
                           <div className="flex flex-col gap-[8px]">
                             <InputArtifactCard
@@ -647,20 +671,47 @@ export default function Page() {
                       />
                     );
                   }
+                  if (item.type === "pattern-confirmation") {
+                    return (
+                      <TimelineNode
+                        role="ai"
+                        timestamp={item.data.timestamp}
+                        content={
+                          <PatternConfirmationBubble
+                            result={item.data.result}
+                            taskContext={item.data.taskContext}
+                            onConfirm={(correction) => handleConfirmPattern(item.id, item.data.result, item.data.taskContext, correction)}
+                          />
+                        }
+                      />
+                    );
+                  }
                   if (item.type === "review-request") {
                     return (
                       <StreamingTimelineNode
                         initialResult={item.data.result}
                         onLineClick={(lineNum) => handleLineClick(lineNum, item.data.result)}
                         onActiveStreamChange={handleStreamChange}
+                        onAskFollowUp={handleAskFollowUp}
                         onReasoningComplete={(reasoning) => {
-                          setMessages((prev) => 
-                            prev.map(m => m.id === item.id && m.type === 'review-request' ? {
-                              ...m,
-                              result: { ...m.result, reasoning }
-                            } : m)
+                          appStore.setState({ processingState: 'done' });
+                          setMessages((prev) =>
+                            prev.map((m) =>
+                              m.id === item.id && m.type === 'review-request'
+                                ? { ...m, result: { ...m.result, reasoning } }
+                                : m,
+                            ),
                           );
                         }}
+                      />
+                    );
+                  }
+                  if (item.type === "ai-chat") {
+                    return (
+                      <ChatFollowUpMessage
+                        content={item.data.content}
+                        isStreaming={item.data.isStreaming}
+                        timestamp={item.data.timestamp}
                       />
                     );
                   }
@@ -668,16 +719,15 @@ export default function Page() {
                     return <TimelineNode role="ai" isTyping content="" />;
                   }
                   if (item.type === "processing") {
-                    const msg = 
+                    const msg =
                       item.data === "normalizing" ? "Normalizing payload..." :
                       item.data === "understanding" ? "Extracting architecture and metadata..." :
                       item.data === "grounding" ? "Retrieving version-specific knowledge..." : "Processing...";
-                    
                     return (
-                      <TimelineNode 
-                        role="ai" 
-                        timestamp={new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} 
-                        content={<span className="flex items-center gap-[6px] text-[var(--muted)] italic font-code"><span className="w-[6px] h-[6px] rounded-full bg-[var(--info)] animate-pulse"></span> {msg}</span>} 
+                      <TimelineNode
+                        role="ai"
+                        timestamp={nowTimestamp()}
+                        content={<span className="flex items-center gap-[6px] text-[var(--muted)] italic font-code"><span className="w-[6px] h-[6px] rounded-full bg-[var(--info)] animate-pulse"></span> {msg}</span>}
                       />
                     );
                   }
@@ -691,16 +741,19 @@ export default function Page() {
             onSend={handleSend} 
             onQuickSend={handleSend} 
             onFileUpload={handleFileUpload}
-            isReasoning={isStreaming}
-            disabled={isProcessing || isTyping || isStreaming}
+            stagedFilename={stagedPayload?.filename}
+            onCancelStaged={() => appStore.setState({ stagedPayload: null })}
+            isReasoning={isStreaming || findingChat.status === 'streaming' || findingChat.status === 'submitted'}
+            disabled={isProcessing || isTyping || isStreaming || findingChat.status === 'streaming' || findingChat.status === 'submitted'}
             onCancel={() => {
               stopStreamRef.current?.();
               setIsStreaming(false);
+              findingChat.stop();
             }}
           />
         </div>
 
-        {/* CODE PANEL — powered by real codeLines from the pipeline */}
+        {}
         <ErrorBoundary fallbackTitle="Code Panel Error" fallbackMessage="Failed to render code preview." className="w-[380px] h-full" compact>
           <CodePanel
             isOpen={isCodePanelOpen}

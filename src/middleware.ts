@@ -1,27 +1,18 @@
 import { withAuth } from 'next-auth/middleware';
 import { NextResponse } from 'next/server';
+import { logger } from '@/lib/logger';
+import { checkRateLimit } from '@/lib/rate-limit';
 
-/**
- * Auth paths — used for authentication.
- * Authenticated users visiting these will be redirected to the dashboard.
- */
 const AUTH_PATHS = [
   '/auth/signin',
   '/auth/error',
 ];
 
-/**
- * Public paths — accessible to everyone.
- * Unauthenticated users can view these without being redirected.
- */
 const PUBLIC_PATHS: string[] = [
-  // Add public landing pages or docs here.
-  // The root path '/' is our protected dashboard, so it is NOT here.
+  
+  
 ];
 
-/**
- * NextAuth system paths — always public.
- */
 const NEXTAUTH_PATHS = [
   '/api/auth',
 ];
@@ -29,16 +20,30 @@ const NEXTAUTH_PATHS = [
 export default withAuth(
   function middleware(req) {
     const { pathname } = req.nextUrl;
+
+    if (NEXTAUTH_PATHS.some((p) => pathname.startsWith(p))) {
+      const ip = req.headers.get('x-forwarded-for') || req.ip || '127.0.0.1';
+      const { allowed, retryAfterMs } = checkRateLimit(`auth:${ip}`);
+      if (!allowed) {
+        logger.warn('[Middleware]', `Rate limit hit on auth route for IP ${ip}`);
+        const retryAfterSec = Math.ceil(retryAfterMs / 1000);
+        return new NextResponse(
+          JSON.stringify({ error: `Rate limit exceeded. Try again in ${retryAfterSec}s.` }),
+          { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': String(retryAfterSec) } }
+        );
+      }
+    }
+
     const token = req.nextauth.token;
 
     const isAuthPath = AUTH_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'));
 
-    // 1. Authenticated user flow for auth pages
+    
     if (isAuthPath && token) {
       return NextResponse.redirect(new URL('/', req.url));
     }
 
-    // 2. Allow request to continue
+    
     return NextResponse.next();
   },
   {
@@ -50,15 +55,14 @@ export default withAuth(
         const isPublicPath = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'));
         const isNextAuthPath = NEXTAUTH_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'));
 
-        // Always allow public, auth, and next-auth routes through this callback.
-        // The middleware function above handles the authenticated-user-on-auth-path redirect.
+        
+        
         if (isAuthPath || isPublicPath || isNextAuthPath) {
-          console.log(`[Middleware] Path ${pathname} is allowed by path matching.`);
+          logger.debug('[Middleware]', `Path ${pathname} is allowed by path matching.`);
           return true;
         }
 
-        console.log(`[Middleware] Path ${pathname} checking token:`, !!token);
-        // For all other routes (Protected Routes), require a valid session token.
+        logger.debug('[Middleware]', `Path ${pathname} checking token: ${!!token}`);
         return !!token;
       },
     },
@@ -69,7 +73,7 @@ export default withAuth(
 );
 
 export const config = {
-  // Run middleware on all routes except static files and Next.js internals
+  
   matcher: [
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)).*)',
   ],

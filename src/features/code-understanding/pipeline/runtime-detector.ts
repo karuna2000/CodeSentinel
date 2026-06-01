@@ -1,26 +1,6 @@
-/**
- * Runtime Detector — infers the execution environment of the code artifact.
- *
- * Categories:
- *  - 'browser'     — DOM APIs, window, document, localStorage
- *  - 'node'        — fs, path, process.env, require, child_process
- *  - 'edge'        — EdgeRuntime, export const runtime='edge', Request/Response
- *  - 'serverless'  — Lambda handler exports, Vercel edge, Cloudflare Workers
- *  - 'cli'         — process.argv, readline, yargs, commander
- *  - 'middleware'  — next() / ctx pattern without full app context
- *  - 'unknown'     — insufficient signals
- *
- * Design:
- *  - Pure function, no side effects
- *  - Multiple signals compound confidence
- *  - Returns null when confidence is too low to classify
- */
+
 
 import type { RuntimeDetection } from '@/types/code-understanding';
-
-// ---------------------------------------------------------------------------
-// Runtime rule definitions
-// ---------------------------------------------------------------------------
 
 interface RuntimeRule {
   type: string;
@@ -31,7 +11,7 @@ interface RuntimeRule {
 }
 
 const RUNTIME_RULES: RuntimeRule[] = [
-  // Edge Runtime (check before browser/node — most specific)
+  
   {
     type: 'edge',
     baseConfidence: 0.78,
@@ -46,7 +26,7 @@ const RUNTIME_RULES: RuntimeRule[] = [
     ],
   },
 
-  // Serverless / Lambda
+  
   {
     type: 'serverless',
     baseConfidence: 0.75,
@@ -76,7 +56,7 @@ const RUNTIME_RULES: RuntimeRule[] = [
     ],
   },
 
-  // Browser
+  
   {
     type: 'browser',
     baseConfidence: 0.72,

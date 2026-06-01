@@ -1,25 +1,10 @@
-/**
- * Audit Engine — converts an InputPayload into a ProcessingResult.
- *
- * This is the central processing dispatcher. In the initial implementation
- * it performs structural parsing (line extraction, metadata derivation).
- * Future stages will plug in AI-powered finding annotations here.
- *
- * Design principles:
- * - Pure function (no side-effects, no UI coupling)
- * - Synchronous (async orchestration happens in the hook/store layer)
- * - Scalable: ready for multi-file and enrichment stages
- */
+
 
 import type { InputPayload, ProcessingResult, CodeLine, CodePin } from '@/types/audit';
 import { formatByteSize } from '../utils/payload-scrubber';
 import { runCodeUnderstandingAgent } from '@/features/code-understanding/agent';
 import { artifactFromProcessingResult } from '@/types/artifact';
 
-/**
- * Escapes HTML special characters in a code line string so it is safe
- * to render via dangerouslySetInnerHTML in code panels.
- */
 function escapeHtml(raw: string): string {
   return raw
     .replace(/&/g, '&amp;')

@@ -1,10 +1,5 @@
 'use client';
 
-/**
- * Global providers wrapper.
- * SessionProvider must be a Client Component boundary.
- */
-
 import { SessionProvider } from 'next-auth/react';
 import type { Session } from 'next-auth';
 import type { ReactNode } from 'react';

@@ -1,14 +1,9 @@
-/**
- * Integration tests for the Version Grounding Orchestrator (runVersionGrounding)
- * and the full agent pipeline (versionGrounding on CodeUnderstandingOutput).
- */
+
 
 import { describe, it, expect } from 'vitest';
 import { runVersionGrounding } from '@/features/version-grounding';
 import { runCodeUnderstandingAgent } from '@/features/code-understanding/agent';
 import type { InputArtifact } from '@/types/artifact';
-
-// ─── Sample code fixtures ─────────────────────────────────────────────────────
 
 const REACT18_CODE = `import { useState, useTransition, createRoot } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -61,8 +56,6 @@ function makeArtifact(content: string, filename = 'route.ts'): InputArtifact {
   };
 }
 
-// ─── runVersionGrounding orchestrator ────────────────────────────────────────
-
 describe('runVersionGrounding — empty frameworks', () => {
   it('returns empty output when no frameworks passed', () => {
     const output = runVersionGrounding([], REACT18_CODE);
@@ -98,7 +91,7 @@ describe('runVersionGrounding — React 18 scenario', () => {
 
   it('does not require version clarification for high-confidence React 18 detection', () => {
     const output = runVersionGrounding(['React'], REACT18_CODE);
-    // With useTransition + createRoot, confidence should be above threshold
+    
     const react = output.frameworks[0];
     if (react.versionInference.confidence >= 0.60) {
       expect(react.versionClarificationQuestions).toHaveLength(0);
@@ -122,7 +115,7 @@ describe('runVersionGrounding — Next.js App Router + Prisma', () => {
 
   it('merges grounding sources from multiple frameworks', () => {
     const output = runVersionGrounding(['Next.js', 'Prisma'], NEXTJS_APP_ROUTER_CODE);
-    // Should have sources from both Next.js and Prisma
+    
     expect(output.groundingSources.length).toBeGreaterThan(2);
   });
 
@@ -159,16 +152,14 @@ describe('runVersionGrounding — output shape', () => {
   });
 
   it('versionClarificationQuestions is capped at 2', () => {
-    // Run with 5 unknown frameworks to stress the cap
+    
     const output = runVersionGrounding(
       ['React', 'Vue', 'Express', 'NestJS', 'FastAPI'],
-      'const x = 1;', // no version signals → should trigger clarification for all
+      'const x = 1;', 
     );
     expect(output.versionClarificationQuestions.length).toBeLessThanOrEqual(2);
   });
 });
-
-// ─── Full agent integration ───────────────────────────────────────────────────
 
 describe('runCodeUnderstandingAgent — versionGrounding integration', () => {
   it('attaches versionGrounding to output for Next.js code', () => {
@@ -204,11 +195,11 @@ describe('runCodeUnderstandingAgent — versionGrounding integration', () => {
   });
 
   it('versionGrounding is null when no framework detected', () => {
-    // Plain utility code with no framework
+    
     const code = 'export function clamp(v: number, min: number, max: number) { return Math.min(Math.max(v, min), max); }';
     const artifact = makeArtifact(code, 'math.ts');
     const output = runCodeUnderstandingAgent(artifact);
-    // Either null or empty frameworks
+    
     if (output.versionGrounding !== null) {
       expect(output.versionGrounding.frameworks.length).toBe(0);
     }

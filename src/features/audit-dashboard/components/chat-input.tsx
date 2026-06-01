@@ -4,22 +4,29 @@ import { validateFileSize, validateFileType, validatePasteContent } from "@/lib/
 interface ChatInputProps {
   onSend: (message: string) => void;
   onQuickSend: (message: string) => void;
-  /** Called when a valid file is attached — passes the real File object */
   onFileUpload?: (file: File) => void;
   isReasoning?: boolean;
   disabled?: boolean;
   onCancel?: () => void;
+  stagedFilename?: string;
+  onCancelStaged?: () => void;
 }
 
-export function ChatInput({ onSend, onQuickSend, onFileUpload, isReasoning, disabled, onCancel }: ChatInputProps) {
+export function ChatInput({ onSend, onQuickSend, onFileUpload, isReasoning, disabled, onCancel, stagedFilename, onCancelStaged }: ChatInputProps) {
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showDisabledError = () => {
+    setError("Please wait for the active request to finish before interacting.");
+    if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+    errorTimerRef.current = setTimeout(() => setError(null), 3000);
+  };
 
   const handleDisabledAction = () => {
     if (disabled) {
-      setError("Please wait for the active request to finish before interacting.");
-      setTimeout(() => setError(null), 3000);
+      showDisabledError();
       return true;
     }
     return false;
@@ -36,7 +43,7 @@ export function ChatInput({ onSend, onQuickSend, onFileUpload, isReasoning, disa
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (disabled) {
-      // Ignore navigation keys, block others
+      
       if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
         e.preventDefault();
         handleDisabledAction();
@@ -78,7 +85,7 @@ export function ChatInput({ onSend, onQuickSend, onFileUpload, isReasoning, disa
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate size
+    
     const sizeCheck = validateFileSize(file);
     if (!sizeCheck.valid) {
       setError(sizeCheck.error || "File is invalid.");
@@ -86,7 +93,7 @@ export function ChatInput({ onSend, onQuickSend, onFileUpload, isReasoning, disa
       return;
     }
 
-    // Validate type
+    
     const typeCheck = validateFileType(file);
     if (!typeCheck.valid) {
       setError(typeCheck.error || "File type is invalid.");
@@ -95,7 +102,7 @@ export function ChatInput({ onSend, onQuickSend, onFileUpload, isReasoning, disa
     }
 
     setError(null);
-    // Forward the real File to the parent pipeline
+    
     if (onFileUpload) {
       onFileUpload(file);
     } else {
@@ -110,8 +117,19 @@ export function ChatInput({ onSend, onQuickSend, onFileUpload, isReasoning, disa
           {error}
         </div>
       )}
+      {stagedFilename && (
+        <div className="flex items-center gap-[6px] bg-[rgba(26,22,18,0.06)] border border-[var(--border)] w-max px-[10px] py-[4px] rounded-[6px] text-[11px] font-code text-[var(--text)] mb-[2px] animate-[msgIn_.15s_ease-out]">
+          📄 <span className="font-semibold">{stagedFilename}</span>
+          <button 
+            onClick={onCancelStaged}
+            className="ml-[4px] w-[16px] h-[16px] flex items-center justify-center rounded-full text-[var(--muted)] hover:bg-[var(--danger)] hover:text-white transition-colors"
+          >
+            ×
+          </button>
+        </div>
+      )}
       <div className="flex items-end gap-[10px]">
-        <div className="flex-1 bg-[var(--card)] border border-[var(--border)] rounded-[10px] p-[10px_14px] flex items-end gap-[8px] transition-colors duration-150 focus-within:border-[var(--border2)] focus-within:shadow-[0_0_0_3px_rgba(26,22,18,0.06)]">
+        <div className="flex-1 bg-[var(--card)] border border-[var(--border)] rounded-[10px] p-[10px_14px] flex items-end gap-[8px] transition-colors duration-150 focus-within:border-[var(--border2)] focus-within:shadow-[0_0_0_3px_rgba(26,22,18,0.06)] relative">
           <textarea
             ref={textareaRef}
             rows={1}

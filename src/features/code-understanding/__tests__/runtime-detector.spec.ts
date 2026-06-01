@@ -1,6 +1,4 @@
-/**
- * Tests for the Runtime Detector.
- */
+
 
 import { describe, it, expect } from 'vitest';
 import { detectRuntime } from '@/features/code-understanding/pipeline/runtime-detector';
@@ -98,7 +96,7 @@ describe('detectRuntime — no runtime', () => {
     const code = `export interface User { id: string; name: string; }
 export type Role = 'admin' | 'user';`;
     const result = detectRuntime(code, 'types.ts');
-    // May return null or low confidence
+    
     if (result !== null) {
       expect(result.confidence).toBeLessThan(0.60);
     }

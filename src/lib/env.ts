@@ -1,7 +1,4 @@
-/**
- * Environment variable validation.
- * Throws at startup if required secrets are missing.
- */
+
 
 function requireEnv(key: string): string {
   const value = process.env[key];
@@ -22,6 +19,9 @@ export const env = {
   nextAuth: {
     secret: requireEnv('NEXTAUTH_SECRET'),
     url: process.env.NEXTAUTH_URL ?? 'http://localhost:3000',
+  },
+  nvidia: {
+    apiKey: requireEnv('NVIDIA_API_KEY'),
   },
   nodeEnv: process.env.NODE_ENV ?? 'development',
   isProduction: process.env.NODE_ENV === 'production',

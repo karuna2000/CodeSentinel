@@ -20,25 +20,25 @@ export function VirtualizedChatList<T>({ items, renderItem, className = "" }: Vi
   const virtualizer = useVirtualizer({
     count: items.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 120, // default rough estimate for chat messages
+    estimateSize: () => 120, 
     getItemKey: (index) => items[index]?.id ?? index,
   });
 
   const itemsLength = items.length;
 
-  // Track if user is at the bottom of the chat
+  
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
-    const threshold = 80; // slightly forgiving threshold (px)
+    const threshold = 80; 
     const isBottom = target.scrollHeight - target.scrollTop - target.clientHeight <= threshold;
     setIsAtBottom(isBottom);
   };
 
-  // Scroll anchoring: if user was at the bottom, automatically scroll down when new content pushes height
+  
   const totalSize = virtualizer.getTotalSize();
   useLayoutEffect(() => {
     if (isAtBottom && itemsLength > 0 && parentRef.current) {
-      // Force native scroll to bottom
+      
       parentRef.current.scrollTop = parentRef.current.scrollHeight;
     }
   }, [totalSize, itemsLength, isAtBottom]);

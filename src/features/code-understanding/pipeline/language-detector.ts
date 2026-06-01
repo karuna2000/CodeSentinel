@@ -1,26 +1,6 @@
-/**
- * Language Detector — multi-signal programming language identification.
- *
- * Detection strategy (in order of priority):
- *  1. File extension mapping (highest certainty when available)
- *  2. Shebang line (`#!/...`) parsing
- *  3. Keyword/syntax heuristics over first 1 KB of content
- *  4. Fallback to "Unknown"
- *
- * Returns a LanguageDetection with confidence score and the signal source.
- * Confidence reflects how certain the detection is, not just a match.
- *
- * Design:
- *  - Pure function, no side effects
- *  - No LLM calls — fully deterministic
- *  - Works on first 1 KB sample for performance
- */
+
 
 import type { LanguageDetection } from '@/types/code-understanding';
-
-// ---------------------------------------------------------------------------
-// Extension → Language map
-// ---------------------------------------------------------------------------
 
 const EXTENSION_LANGUAGE_MAP: Record<string, { name: string; confidence: number }> = {
   '.ts': { name: 'TypeScript', confidence: 0.98 },
@@ -83,10 +63,6 @@ const EXTENSION_LANGUAGE_MAP: Record<string, { name: string; confidence: number 
   '.txt': { name: 'Plain Text', confidence: 0.60 },
 };
 
-// ---------------------------------------------------------------------------
-// Shebang patterns
-// ---------------------------------------------------------------------------
-
 const SHEBANG_PATTERNS: Array<{ pattern: RegExp; language: string }> = [
   { pattern: /^#!.*\bpython3?\b/, language: 'Python' },
   { pattern: /^#!.*\bnode\b/, language: 'JavaScript' },
@@ -96,21 +72,17 @@ const SHEBANG_PATTERNS: Array<{ pattern: RegExp; language: string }> = [
   { pattern: /^#!.*\bphp\b/, language: 'PHP' },
 ];
 
-// ---------------------------------------------------------------------------
-// Content heuristic rules
-// ---------------------------------------------------------------------------
-
 interface LanguageHeuristic {
   language: string;
   confidence: number;
-  /** All patterns must match for confidence ≥ 0.7; any one = 0.5 */
+  
   strongPatterns: RegExp[];
-  /** Any single match gives base confidence */
+  
   weakPatterns: RegExp[];
 }
 
 const HEURISTIC_RULES: LanguageHeuristic[] = [
-  // TypeScript (check before JS — more specific)
+  
   {
     language: 'TypeScript',
     confidence: 0.82,
@@ -122,7 +94,7 @@ const HEURISTIC_RULES: LanguageHeuristic[] = [
       /\b(interface\s+\w+|type\s+\w+\s*=|:\s*string|: number|: boolean|as const|readonly )\b/,
     ],
   },
-  // React/JSX — check before pure TS/JS
+  
   {
     language: 'TypeScript',
     confidence: 0.85,
@@ -228,14 +200,14 @@ const HEURISTIC_RULES: LanguageHeuristic[] = [
     strongPatterns: [/^\s*[{[]/],
     weakPatterns: [/"[^"]+"\s*:/],
   },
-  // HTML
+  
   {
     language: 'HTML',
     confidence: 0.92,
     strongPatterns: [/<!DOCTYPE html|<html[\s>]/i],
     weakPatterns: [/<(head|body|div|span|p|a)\s*[\s>]/i],
   },
-  // CSS
+  
   {
     language: 'CSS',
     confidence: 0.82,
@@ -245,14 +217,14 @@ const HEURISTIC_RULES: LanguageHeuristic[] = [
     ],
     weakPatterns: [/\{[^}]*:[^}]*;[^}]*\}/],
   },
-  // Markdown
+  
   {
     language: 'Markdown',
     confidence: 0.70,
     strongPatterns: [/^#{1,6}\s+\S/m, /^\[.+\]\(.+\)/m],
     weakPatterns: [/^[-*]\s+\w/m],
   },
-  // GraphQL
+  
   {
     language: 'GraphQL',
     confidence: 0.90,
@@ -261,18 +233,8 @@ const HEURISTIC_RULES: LanguageHeuristic[] = [
   },
 ];
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
-/**
- * Detects the programming language of a code artifact.
- *
- * @param content  Raw text content of the file
- * @param filename Optional filename (used for extension detection)
- */
 export function detectLanguage(content: string, filename?: string): LanguageDetection {
-  // 1. Extension detection (highest priority when available)
+  
   if (filename) {
     const ext = extractExtension(filename);
     const extMatch = EXTENSION_LANGUAGE_MAP[ext];
@@ -284,7 +246,7 @@ export function detectLanguage(content: string, filename?: string): LanguageDete
       };
     }
 
-    // Special case: Dockerfile (no extension)
+    
     if (filename.toLowerCase() === 'dockerfile' || filename.toLowerCase().endsWith('/dockerfile')) {
       return { name: 'Dockerfile', confidence: 0.99, detectedVia: 'extension' };
     }
@@ -292,7 +254,7 @@ export function detectLanguage(content: string, filename?: string): LanguageDete
 
   const sample = content.slice(0, 1200);
 
-  // 2. Shebang detection
+  
   if (sample.startsWith('#!')) {
     for (const { pattern, language } of SHEBANG_PATTERNS) {
       if (pattern.test(sample)) {
@@ -301,7 +263,7 @@ export function detectLanguage(content: string, filename?: string): LanguageDete
     }
   }
 
-  // 3. Content heuristics
+  
   for (const rule of HEURISTIC_RULES) {
     const strongMatch = rule.strongPatterns.every((p) => p.test(sample));
     if (strongMatch) {
@@ -321,13 +283,9 @@ export function detectLanguage(content: string, filename?: string): LanguageDete
     }
   }
 
-  // 4. Fallback
+  
   return { name: 'Unknown', confidence: 0.10, detectedVia: 'fallback' };
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function extractExtension(filename: string): string {
   const dotIndex = filename.lastIndexOf('.');

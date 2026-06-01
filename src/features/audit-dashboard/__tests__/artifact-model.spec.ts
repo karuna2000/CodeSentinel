@@ -1,6 +1,4 @@
-/**
- * Tests for the InputArtifact model and artifactFromProcessingResult factory.
- */
+
 
 import { describe, it, expect } from 'vitest';
 import { artifactFromProcessingResult } from '@/types/artifact';

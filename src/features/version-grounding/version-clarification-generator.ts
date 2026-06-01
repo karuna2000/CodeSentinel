@@ -1,32 +1,10 @@
-/**
- * Version Clarification Generator — generates version-specific clarification
- * questions when version inference is uncertain.
- *
- * These questions are separate from the general clarification questions
- * in the Code Understanding Agent. They are targeted specifically at
- * reducing version-related hallucination risk.
- *
- * Principles:
- *  - Only ask when version confidence is below VERSION_CLARIFICATION_THRESHOLD
- *  - Questions are framework-specific and actionable
- *  - Max 1 question per framework
- *  - Total max 2 version questions (avoid overwhelming the user)
- *
- * Design:
- *  - Pure function, no side effects
- */
+
 
 import { getFrameworkEntry } from './framework-registry';
 
-/** Below this threshold, ask the user for version clarification */
 export const VERSION_CLARIFICATION_THRESHOLD = 0.60;
 
-/** Maximum total version clarification questions across all frameworks */
 const MAX_VERSION_QUESTIONS = 2;
-
-// ---------------------------------------------------------------------------
-// Framework-specific question templates
-// ---------------------------------------------------------------------------
 
 const VERSION_QUESTIONS: Record<string, (versionHint: string | null) => string> = {
   'React': (hint) =>
@@ -62,17 +40,6 @@ const VERSION_QUESTIONS: Record<string, (versionHint: string | null) => string> 
     'Which version of FastAPI is this project using (e.g. FastAPI 0.100+)?',
 };
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
-/**
- * Generates version clarification questions for frameworks whose inferred
- * version confidence is below the threshold.
- *
- * @param frameworkVersions  Map of framework name → { confidence, versionLabel }
- * @returns  Array of clarification question strings (max MAX_VERSION_QUESTIONS)
- */
 export function generateVersionClarificationQuestions(
   frameworkVersions: Array<{
     framework: string;
@@ -86,12 +53,12 @@ export function generateVersionClarificationQuestions(
     if (questions.length >= MAX_VERSION_QUESTIONS) break;
 
     if (confidence < VERSION_CLARIFICATION_THRESHOLD) {
-      // Use framework-specific template if available
+      
       const templateFn = VERSION_QUESTIONS[framework];
       if (templateFn) {
         questions.push(templateFn(versionLabel));
       } else {
-        // Generic fallback for frameworks not in the template map
+        
         const entry = getFrameworkEntry(framework);
         if (entry && entry.versionBrackets.length > 0) {
           const versionList = entry.versionBrackets.map((b) => b.label).join(' / ');

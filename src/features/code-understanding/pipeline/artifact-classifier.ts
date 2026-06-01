@@ -1,43 +1,20 @@
-/**
- * Artifact Classifier — probabilistic classification of what role a file plays.
- *
- * Categories:
- *  'react-component' | 'api-route' | 'middleware' | 'hook' | 'context-provider'
- *  | 'schema-model' | 'utility' | 'config' | 'auth-module' | 'database-layer'
- *  | 'test-file' | 'store' | 'service' | 'unknown'
- *
- * Approach:
- *  - Export shape analysis (default export, named exports)
- *  - File naming conventions
- *  - Decorator patterns
- *  - Import patterns indicating role
- *  - Function signature patterns
- *
- * Design:
- *  - Pure function, no side effects
- *  - Probabilistic: returns null when not confident enough
- *  - Returns the highest-scoring classification
- */
+
 
 import type { ArtifactTypeDetection } from '@/types/code-understanding';
-
-// ---------------------------------------------------------------------------
-// Classifier rules
-// ---------------------------------------------------------------------------
 
 interface ClassifierRule {
   type: string;
   baseConfidence: number;
   confidencePerExtraSignal: number;
   maxConfidence: number;
-  /** Optional filename patterns that strongly suggest this type */
+  
   filenamePatterns?: RegExp[];
-  /** Content patterns */
+  
   patterns: Array<{ regex: RegExp; label: string }>;
 }
 
 const CLASSIFIER_RULES: ClassifierRule[] = [
-  // Test file (check first — very distinctive)
+  
   {
     type: 'test-file',
     baseConfidence: 0.82,

@@ -1,6 +1,4 @@
-/**
- * Tests for the Artifact Classifier.
- */
+
 
 import { describe, it, expect } from 'vitest';
 import { classifyArtifact } from '@/features/code-understanding/pipeline/artifact-classifier';

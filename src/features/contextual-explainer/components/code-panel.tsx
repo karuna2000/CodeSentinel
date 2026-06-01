@@ -42,7 +42,7 @@ export const CodePanel = React.memo(function CodePanel({
 
   useEffect(() => {
     if (activeLine && isOpen && codeWrapRef.current) {
-      // Small timeout to allow any CSS transitions (like width changing from 0) to start
+      
       setTimeout(() => {
         const container = codeWrapRef.current;
         if (!container) return;
@@ -62,7 +62,7 @@ export const CodePanel = React.memo(function CodePanel({
     }
   }, [activeLine, isOpen]);
 
-  // Truncate to 1000 lines to prevent DOM freeze
+  
   const MAX_LINES = 1000;
   const isTruncated = codeLines.length > MAX_LINES;
   const renderedLines = isTruncated ? codeLines.slice(0, MAX_LINES) : codeLines;

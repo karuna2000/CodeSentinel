@@ -1,6 +1,4 @@
-/**
- * Tests for the Framework Detector.
- */
+
 
 import { describe, it, expect } from 'vitest';
 import { detectFramework } from '@/features/code-understanding/pipeline/framework-detector';
@@ -98,7 +96,7 @@ describe('detectFramework — no framework', () => {
     const code = `export function add(a: number, b: number) { return a + b; }
 export function sub(a: number, b: number) { return a - b; }`;
     const result = detectFramework(code, 'math.ts');
-    // Should either be null or very low confidence
+    
     if (result !== null) {
       expect(result.confidence).toBeLessThan(0.65);
     }
