@@ -12,7 +12,7 @@ export function EmptyState({ onFileSelect }: EmptyStateProps) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate size
+    
     const sizeCheck = validateFileSize(file);
     if (!sizeCheck.valid) {
       setError(sizeCheck.error || "File is invalid.");
@@ -20,7 +20,7 @@ export function EmptyState({ onFileSelect }: EmptyStateProps) {
       return;
     }
 
-    // Validate type
+    
     const typeCheck = validateFileType(file);
     if (!typeCheck.valid) {
       setError(typeCheck.error || "File type is invalid.");

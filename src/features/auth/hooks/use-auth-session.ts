@@ -1,10 +1,5 @@
 'use client';
 
-/**
- * Thin wrapper around next-auth's useSession.
- * Provides convenient derived state for auth-gated components.
- */
-
 import { useSession } from 'next-auth/react';
 import type { AuthSession } from '@/types/auth.types';
 

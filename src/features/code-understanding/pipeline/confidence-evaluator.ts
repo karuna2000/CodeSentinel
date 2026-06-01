@@ -1,23 +1,4 @@
-/**
- * Confidence Evaluator — aggregates per-detection confidence scores into an
- * overall confidence value and determines whether clarification is required.
- *
- * Weighting:
- *  - Language detection:  35% (most fundamental)
- *  - Framework detection: 25% (important but optional)
- *  - Runtime detection:   20% (contextual)
- *  - Artifact type:       20% (role classification)
- *
- * When a detection is absent (null), its slot contributes a low default
- * of 0.35 to reflect genuine uncertainty — we don't pretend certainty.
- *
- * Threshold:
- *  - overall < 0.65 → requiresClarification = true
- *
- * Design:
- *  - Pure function, no side effects
- *  - All inputs are optional — handles partial pipeline results gracefully
- */
+
 
 import type {
   LanguageDetection,
@@ -26,10 +7,6 @@ import type {
   ArtifactTypeDetection,
 } from '@/types/code-understanding';
 
-// ---------------------------------------------------------------------------
-// Weighting constants
-// ---------------------------------------------------------------------------
-
 const WEIGHTS = {
   language: 0.35,
   framework: 0.25,
@@ -37,20 +14,14 @@ const WEIGHTS = {
   artifactType: 0.20,
 } as const;
 
-/** Confidence assigned when a detection is absent (null) */
 const ABSENT_CONFIDENCE = 0.35;
 
-/** Below this threshold we request clarification from the user */
 export const CLARIFICATION_THRESHOLD = 0.65;
-
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
 
 export interface ConfidenceEvaluation {
   overallConfidence: number;
   requiresClarification: boolean;
-  /** Per-component breakdown for debugging / display */
+  
   breakdown: {
     language: number;
     framework: number;
@@ -59,14 +30,6 @@ export interface ConfidenceEvaluation {
   };
 }
 
-/**
- * Computes an aggregate confidence score across all detection components.
- *
- * @param language     Language detection result
- * @param framework    Framework detection result (nullable)
- * @param runtime      Runtime detection result (nullable)
- * @param artifactType Artifact type classification (nullable)
- */
 export function evaluateConfidence(
   language: LanguageDetection,
   framework: FrameworkDetection | null,
@@ -96,10 +59,6 @@ export function evaluateConfidence(
   };
 }
 
-/**
- * Formats a confidence score as a human-readable percentage string.
- * e.g. 0.82 → "82%"
- */
 export function formatConfidence(score: number): string {
   return `${Math.round(score * 100)}%`;
 }

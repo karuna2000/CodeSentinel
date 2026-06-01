@@ -1,6 +1,4 @@
-/**
- * Tests for the Signal Extractor.
- */
+
 
 import { describe, it, expect } from 'vitest';
 import { extractSignals } from '@/features/code-understanding/pipeline/signal-extractor';
@@ -127,7 +125,7 @@ describe('extractSignals — empty for clean code', () => {
   return Math.min(Math.max(val, min), max);
 }`;
     const signals = extractSignals(code);
-    // Should have no signals except possibly async-boundary or error-handling
+    
     const heavySignals = signals.filter((s) =>
       ['authentication', 'database', 'caching', 'websocket', 'filesystem-access'].includes(s.name)
     );

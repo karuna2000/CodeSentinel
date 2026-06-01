@@ -2,10 +2,6 @@ import { z } from 'zod';
 import type { CodeUnderstandingOutput } from './code-understanding';
 import type { VersionGroundingOutput } from './version-grounding';
 
-// ---------------------------------------------------------------------------
-// Finding Schemas (Structured Output)
-// ---------------------------------------------------------------------------
-
 export const FindingCategorySchema = z.enum([
   'architecture',
   'security',
@@ -37,10 +33,6 @@ export type FindingCategory = z.infer<typeof FindingCategorySchema>;
 export type FindingSeverity = z.infer<typeof FindingSeveritySchema>;
 export type Finding = z.infer<typeof FindingSchema>;
 
-// ---------------------------------------------------------------------------
-// Reasoning Output Schema
-// ---------------------------------------------------------------------------
-
 export const ReasoningOutputSchema = z.object({
   findings: z.array(FindingSchema).describe('The structured code-review findings.'),
   clarificationQuestions: z.array(
@@ -53,42 +45,58 @@ export const ReasoningOutputSchema = z.object({
 
 export type ReasoningOutput = z.infer<typeof ReasoningOutputSchema>;
 
-// ---------------------------------------------------------------------------
-// Context Interfaces
-// ---------------------------------------------------------------------------
-
-/**
- * The structured context provided to the LLM for reasoning.
- * This is built from the deterministic understanding and version grounding systems.
- */
 export interface ReasoningContext {
-  /** Summary of the code understanding */
+  
   understandingSummary: string;
   
-  /** The framework detected, if any */
+  
   framework: string | null;
   
-  /** The runtime detected, if any */
+  
   runtime: string | null;
   
-  /** The artifact type detected, if any */
+  
   artifactType: string | null;
   
-  /** Key dependencies identified */
+  
   dependencies: string[];
   
-  /** Key architectural signals identified */
+  
   architecturalSignals: string[];
 
-  /** The versions inferred for the frameworks (e.g., 'React 18.x') */
+  
   versionInferences: string[];
 
-  /** The modern/deprecated API patterns detected in the code */
+  
   apiPatterns: string[];
 
-  /** The primary grounding source URLs that the LLM could be expected to know about or use as a reference */
+  
   groundingSources: string[];
 
-  /** The raw code content to analyze */
+  
   codeContent: string;
+}
+
+// ─── Follow-Up Chat Types ─────────────────────────────────────────────────────
+
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface ChatFindingContext {
+  id: string;
+  title: string;
+  category: string;
+  severity: string;
+  explanation: string;
+  recommendation: string;
+  evidence: string[];
+  codeSnippet?: string;
+}
+
+export interface ChatRequestBody {
+  mode: 'chat';
+  messages: ChatMessage[];
+  findingContext?: ChatFindingContext;
 }

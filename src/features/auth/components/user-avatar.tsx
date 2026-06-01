@@ -4,18 +4,16 @@ import { useSession, signOut } from 'next-auth/react';
 import { useState } from 'react';
 
 interface UserAvatarProps {
-  /** Show sign-out dropdown on click */
+  
   showSignOut?: boolean;
 }
 
-/**
- * Displays the authenticated user's avatar (Google photo or initials fallback).
- * Clicking shows a sign-out dropdown.
- */
 export function UserAvatar({ showSignOut = true }: UserAvatarProps) {
   const { data: session, status } = useSession();
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+
+  const [imageError, setImageError] = useState(false);
 
   if (status === 'loading') {
     return (
@@ -54,13 +52,14 @@ export function UserAvatar({ showSignOut = true }: UserAvatarProps) {
         onClick={() => showSignOut && setOpen((v) => !v)}
         className="w-[30px] h-[30px] rounded-full overflow-hidden border-2 border-transparent hover:border-[var(--accent)] transition-all duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)]"
       >
-        {image ? (
-          // eslint-disable-next-line @next/next/no-img-element
+        {image && !imageError ? (
+          
           <img
             src={image}
             alt={name ?? 'User avatar'}
             className="w-full h-full object-cover"
             referrerPolicy="no-referrer"
+            onError={() => setImageError(true)}
           />
         ) : (
           <div className="w-full h-full bg-[var(--accent)] flex items-center justify-center font-code text-[11px] font-semibold text-white">
@@ -69,10 +68,10 @@ export function UserAvatar({ showSignOut = true }: UserAvatarProps) {
         )}
       </button>
 
-      {/* Dropdown menu */}
+      {}
       {open && (
         <>
-          {/* Backdrop */}
+          {}
           <div
             className="fixed inset-0 z-40"
             aria-hidden="true"

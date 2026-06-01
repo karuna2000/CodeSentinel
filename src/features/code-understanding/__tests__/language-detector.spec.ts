@@ -1,6 +1,4 @@
-/**
- * Tests for the Language Detector.
- */
+
 
 import { describe, it, expect } from 'vitest';
 import { detectLanguage } from '@/features/code-understanding/pipeline/language-detector';

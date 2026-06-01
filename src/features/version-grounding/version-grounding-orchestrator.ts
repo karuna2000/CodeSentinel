@@ -1,47 +1,10 @@
-/**
- * Version Grounding Orchestrator — top-level entry point for the
- * framework version detection and knowledge grounding pipeline.
- *
- * Drives all version-grounding sub-stages:
- *  1. Per-framework version inference (from code signals)
- *  2. API pattern matching (which specific versioned APIs are used)
- *  3. Grounding source assembly (which docs to fetch before reasoning)
- *  4. Version clarification question generation
- *  5. Summary synthesis
- *
- * This orchestrator is designed to run AFTER the Code Understanding Agent
- * and uses its output (detected frameworks + dependencies) as input.
- *
- * Design:
- *  - Pure function — takes a list of detected framework names + code content
- *  - No side effects, no LLM calls, no network calls
- *  - Each stage is wrapped in safeRun() for resilience
- *  - Returns VersionGroundingOutput ready for downstream agents
- *
- * Anti-hallucination role:
- *  The output.groundingSources list is the "retrieval queue" that MCP tools
- *  or web search should consume BEFORE the LLM reasons about the code.
- *  This ensures the LLM reasons with current docs, not stale training memory.
- */
+
 
 import type { VersionGroundingOutput, FrameworkVersionGrounding } from '@/types/version-grounding';
 import { inferVersion, matchApiPatterns } from './version-signal-extractor';
 import { buildGroundingSources, mergeGroundingSources } from './grounding-context-builder';
 import { generateVersionClarificationQuestions, VERSION_CLARIFICATION_THRESHOLD } from './version-clarification-generator';
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
-/**
- * Runs the full version grounding pipeline over a set of detected frameworks.
- *
- * @param detectedFrameworks  Framework names from the Code Understanding Agent
- *                            (primary + secondary library detections, e.g. ["Next.js", "Prisma"])
- * @param content             Full code content of the artifact
- * @returns                   VersionGroundingOutput with version inferences,
- *                            API patterns, and grounding sources
- */
 export function runVersionGrounding(
   detectedFrameworks: string[],
   content: string,
@@ -50,7 +13,7 @@ export function runVersionGrounding(
     return emptyOutput();
   }
 
-  // ─── Stage 1: Per-framework version inference ────────────────────────────
+  
   const frameworkVersionings: FrameworkVersionGrounding[] = detectedFrameworks
     .map((framework) => {
       const versionInference = safeRun(
@@ -64,19 +27,19 @@ export function runVersionGrounding(
         },
       );
 
-      // ─── Stage 2: API pattern matching ──────────────────────────────────
+      
       const apiPatterns = safeRun(
         () => matchApiPatterns(framework, content),
         [],
       );
 
-      // ─── Stage 3: Grounding source assembly ─────────────────────────────
+      
       const groundingSources = safeRun(
         () => buildGroundingSources(framework, versionInference.label),
         [],
       );
 
-      // ─── Stage 4: Per-framework clarification questions ──────────────────
+      
       const versionClarificationQuestions = safeRun(
         () =>
           generateVersionClarificationQuestions([
@@ -98,21 +61,21 @@ export function runVersionGrounding(
       };
     });
 
-  // ─── Stage 5: Aggregate API patterns ────────────────────────────────────
+  
   const allApiPatterns = dedupApiPatterns(
     frameworkVersionings.flatMap((f) => f.apiPatterns),
   );
 
-  // ─── Stage 6: Merge grounding sources ───────────────────────────────────
+  
   const mergedSources = safeRun(
     () => mergeGroundingSources(frameworkVersionings.map((f) => f.groundingSources)),
     [],
   );
 
-  // ─── Stage 7: Aggregate clarification questions ──────────────────────────
+  
   const allVersionQuestions = dedupStrings(
     frameworkVersionings.flatMap((f) => f.versionClarificationQuestions),
-  ).slice(0, 2); // global max of 2 version clarification questions
+  ).slice(0, 2); 
 
   const requiresVersionClarification =
     allVersionQuestions.length > 0 ||
@@ -120,7 +83,7 @@ export function runVersionGrounding(
       (f) => f.versionInference.confidence < VERSION_CLARIFICATION_THRESHOLD,
     );
 
-  // ─── Stage 8: Summary ────────────────────────────────────────────────────
+  
   const groundingSummary = buildGroundingSummary(frameworkVersionings);
 
   return {
@@ -132,10 +95,6 @@ export function runVersionGrounding(
     groundingSummary,
   };
 }
-
-// ---------------------------------------------------------------------------
-// Summary builder
-// ---------------------------------------------------------------------------
 
 function buildGroundingSummary(frameworkVersionings: FrameworkVersionGrounding[]): string {
   if (frameworkVersionings.length === 0) return 'No frameworks detected — no grounding required';
@@ -157,10 +116,6 @@ function buildGroundingSummary(frameworkVersionings: FrameworkVersionGrounding[]
     ? `${versionLabels} ${suffix}`
     : `${frameworkVersionings.map((f) => f.framework).join(', ')} (versions undetermined) ${suffix}`;
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function emptyOutput(): VersionGroundingOutput {
   return {

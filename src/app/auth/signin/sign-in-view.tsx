@@ -25,7 +25,7 @@ export function SignInView({ error, callbackUrl = '/' }: SignInViewProps) {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[var(--bg)] px-4">
-      {/* Subtle grid background */}
+      {}
       <div
         aria-hidden="true"
         className="pointer-events-none fixed inset-0 opacity-[0.025]"
@@ -39,10 +39,10 @@ export function SignInView({ error, callbackUrl = '/' }: SignInViewProps) {
         aria-label="Sign in to AgentReview"
         className="relative z-10 w-full max-w-[400px]"
       >
-        {/* Card */}
+        {}
         <div className="bg-[var(--card)] border border-[var(--border)] rounded-[16px] shadow-2xl px-8 py-10 flex flex-col gap-8">
 
-          {/* Brand header */}
+          {}
           <header className="flex flex-col items-center gap-3 text-center">
             <div className="flex items-center gap-3">
               <span className="font-hd font-black text-[28px] text-[var(--text)] tracking-[-0.02em]">
@@ -66,7 +66,7 @@ export function SignInView({ error, callbackUrl = '/' }: SignInViewProps) {
             </div>
           </header>
 
-          {/* Error banner */}
+          {}
           {errorMessage && (
             <div
               role="alert"
@@ -79,7 +79,7 @@ export function SignInView({ error, callbackUrl = '/' }: SignInViewProps) {
             </div>
           )}
 
-          {/* Sign-in actions */}
+          {}
           <div className="flex flex-col gap-4">
             <GoogleSignInButton callbackUrl={callbackUrl} />
 
@@ -91,7 +91,7 @@ export function SignInView({ error, callbackUrl = '/' }: SignInViewProps) {
             </p>
           </div>
 
-          {/* Divider */}
+          {}
           <div className="flex items-center gap-3" aria-hidden="true">
             <div className="flex-1 h-px bg-[var(--border)]" />
             <span className="font-code text-[10px] text-[var(--muted)] tracking-widest uppercase">
@@ -100,7 +100,7 @@ export function SignInView({ error, callbackUrl = '/' }: SignInViewProps) {
             <div className="flex-1 h-px bg-[var(--border)]" />
           </div>
 
-          {/* Trust badges */}
+          {}
           <footer className="flex justify-center gap-6">
             {[
               { icon: '🔒', label: 'OAuth 2.0 + PKCE' },
@@ -117,7 +117,7 @@ export function SignInView({ error, callbackUrl = '/' }: SignInViewProps) {
           </footer>
         </div>
 
-        {/* Footer note */}
+        {}
         <p className="mt-4 text-center font-code text-[10px] text-[var(--muted)]">
           AgentReview · Secure Code Analysis Platform
         </p>

@@ -29,7 +29,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("ErrorBoundary caught an error:", error, errorInfo);
-    // Future: send to Sentry/Datadog here
+    
   }
 
   private handleRetry = () => {
@@ -44,7 +44,11 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <ErrorState
           title={this.props.fallbackTitle || "Component Error"}
-          message={this.props.fallbackMessage || this.state.error?.message || "Failed to render this section."}
+          message={
+            this.props.fallbackMessage || 
+            (process.env.NODE_ENV === "development" ? this.state.error?.message : null) || 
+            "Failed to render this section."
+          }
           onRetry={this.handleRetry}
           compact={this.props.compact}
           className={this.props.className}

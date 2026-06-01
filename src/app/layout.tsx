@@ -19,7 +19,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Pass the session to Providers so the client boundary doesn't need an extra round-trip
+  
   const session = await getServerSession(authOptions);
 
   return (

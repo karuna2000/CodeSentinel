@@ -1,25 +1,10 @@
-/**
- * Signal Extractor — extracts named architectural indicators from code.
- *
- * Each signal represents a meaningful architectural pattern whose presence
- * is relevant for downstream analysis agents (security, scalability, quality).
- *
- * Design:
- *  - Pure function, no side effects
- *  - Returns an array of ArchitecturalSignal objects with evidence strings
- *  - Each signal is only emitted once (deduplicated by name)
- *  - Scans the full content (not just a sample) for completeness
- */
+
 
 import type { ArchitecturalSignal, ArchitecturalSignalName } from '@/types/code-understanding';
 
-// ---------------------------------------------------------------------------
-// Signal rule definitions
-// ---------------------------------------------------------------------------
-
 interface SignalRule {
   name: ArchitecturalSignalName;
-  /** First matching pattern wins; the match is used as evidence string */
+  
   patterns: Array<{
     regex: RegExp;
     evidence: string;
@@ -27,7 +12,7 @@ interface SignalRule {
 }
 
 const SIGNAL_RULES: SignalRule[] = [
-  // Authentication
+  
   {
     name: 'authentication',
     patterns: [
@@ -39,7 +24,7 @@ const SIGNAL_RULES: SignalRule[] = [
     ],
   },
 
-  // Database
+  
   {
     name: 'database',
     patterns: [
@@ -91,7 +76,7 @@ const SIGNAL_RULES: SignalRule[] = [
   {
     name: 'api-call',
     patterns: [
-      { regex: /\bfetch\s*\(['"]https?:\/\//, evidence: 'external fetch call' },
+      { regex: /\bfetch\s*\(['"]https?:\/\//, evidence: 'fetch() external URL call' },
       { regex: /\baxios\.(get|post|put|delete|patch)\s*\(/, evidence: 'axios request' },
       { regex: /from ['"]axios['"]|require\(['"]axios['"]\)/, evidence: 'axios import' },
       { regex: /\bnew XMLHttpRequest\s*\(/, evidence: 'XMLHttpRequest usage' },
@@ -176,7 +161,7 @@ const SIGNAL_RULES: SignalRule[] = [
     ],
   },
 
-  // CORS
+  
   {
     name: 'cors',
     patterns: [
@@ -198,16 +183,6 @@ const SIGNAL_RULES: SignalRule[] = [
   },
 ];
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
-/**
- * Extracts architectural signals from the full code content.
- *
- * @param content Full raw file content (not just sample — signals may appear anywhere)
- * @returns Array of unique ArchitecturalSignal objects ordered by rule definition order
- */
 export function extractSignals(content: string): ArchitecturalSignal[] {
   const detected: ArchitecturalSignal[] = [];
   const seen = new Set<ArchitecturalSignalName>();
@@ -219,7 +194,7 @@ export function extractSignals(content: string): ArchitecturalSignal[] {
       if (regex.test(content)) {
         detected.push({ name: rule.name, evidence });
         seen.add(rule.name);
-        break; // only emit each signal once
+        break; 
       }
     }
   }

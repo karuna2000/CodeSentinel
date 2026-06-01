@@ -1,6 +1,4 @@
-/**
- * Tests for the Confidence Evaluator.
- */
+
 
 import { describe, it, expect } from 'vitest';
 import {
@@ -40,7 +38,7 @@ describe('evaluateConfidence — low confidence scenario', () => {
   it('requires clarification when only language has moderate confidence and rest are null', () => {
     const midLang: LanguageDetection = { name: 'JavaScript', confidence: 0.60, detectedVia: 'keyword' };
     const result = evaluateConfidence(midLang, null, null, null);
-    // 0.60 * 0.35 + 0.35 * (0.25 + 0.20 + 0.20) = 0.21 + 0.2275 = 0.4375 → < 0.65
+    
     expect(result.requiresClarification).toBe(true);
   });
 });
@@ -48,7 +46,7 @@ describe('evaluateConfidence — low confidence scenario', () => {
 describe('evaluateConfidence — absent detections', () => {
   it('applies absent confidence (0.35) for null framework', () => {
     const result = evaluateConfidence(HIGH_LANG, null, HIGH_RUNTIME, HIGH_ARTIFACT);
-    // Should still be decent but lower than all-high
+    
     const allHighResult = evaluateConfidence(HIGH_LANG, HIGH_FRAMEWORK, HIGH_RUNTIME, HIGH_ARTIFACT);
     expect(result.overallConfidence).toBeLessThan(allHighResult.overallConfidence);
   });
@@ -56,7 +54,7 @@ describe('evaluateConfidence — absent detections', () => {
   it('provides breakdown with correct language score', () => {
     const result = evaluateConfidence(HIGH_LANG, null, null, null);
     expect(result.breakdown.language).toBe(0.98);
-    expect(result.breakdown.framework).toBe(0.35); // absent default
+    expect(result.breakdown.framework).toBe(0.35); 
     expect(result.breakdown.runtime).toBe(0.35);
     expect(result.breakdown.artifactType).toBe(0.35);
   });

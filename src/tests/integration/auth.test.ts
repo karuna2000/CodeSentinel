@@ -1,13 +1,6 @@
-/**
- * Unit tests for the OAuth token refresh logic in src/lib/auth.ts
- *
- * Tests the jwt callback's token refresh behavior without importing
- * next-auth (which requires a server environment).
- */
+
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-// ─── Simulated types ──────────────────────────────────────────────────────────
 
 interface MockJWT {
   sub?: string;
@@ -24,8 +17,6 @@ interface MockOAuthTokenResponse {
   token_type: 'Bearer';
   scope: string;
 }
-
-// ─── Extracted refresh logic (pure function, testable) ────────────────────────
 
 async function refreshGoogleAccessToken(
   token: MockJWT,
@@ -60,8 +51,6 @@ async function refreshGoogleAccessToken(
   }
 }
 
-// ─── JWT callback simulation ──────────────────────────────────────────────────
-
 async function jwtCallback(
   token: MockJWT,
   refreshFn: (t: MockJWT, fetch: typeof fetch) => Promise<MockJWT>,
@@ -69,7 +58,7 @@ async function jwtCallback(
   account?: { access_token: string; expires_at: number; refresh_token: string },
   user?: { id: string }
 ): Promise<MockJWT> {
-  // Initial sign-in
+  
   if (account && user) {
     return {
       ...token,
@@ -79,16 +68,14 @@ async function jwtCallback(
     };
   }
 
-  // Token still valid
+  
   if (token.accessTokenExpires && Date.now() < token.accessTokenExpires) {
     return token;
   }
 
-  // Token expired — refresh
+  
   return refreshFn(token, fetchFn);
 }
-
-// ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe('JWT callback', () => {
   it('stores Google tokens on initial sign-in', async () => {
@@ -112,7 +99,7 @@ describe('JWT callback', () => {
     const validToken: MockJWT = {
       sub: 'user-001',
       accessToken: 'valid-access-token',
-      accessTokenExpires: Date.now() + 60_000, // expires in 1 min
+      accessTokenExpires: Date.now() + 60_000, 
       refreshToken: 'my-refresh-token',
     };
 
@@ -126,7 +113,7 @@ describe('JWT callback', () => {
     const expiredToken: MockJWT = {
       sub: 'user-001',
       accessToken: 'old-access-token',
-      accessTokenExpires: Date.now() - 1000, // expired 1 second ago
+      accessTokenExpires: Date.now() - 1000, 
       refreshToken: 'valid-refresh-token',
     };
 
@@ -162,13 +149,13 @@ describe('JWT callback', () => {
         expires_in: 3600,
         token_type: 'Bearer',
         scope: 'openid email',
-        // No refresh_token in response
+        
       } satisfies MockOAuthTokenResponse),
     } as unknown as Response);
 
     const result = await jwtCallback(expiredToken, refreshGoogleAccessToken, mockFetch as unknown as typeof fetch);
 
-    // Should keep the original refresh token
+    
     expect(result.refreshToken).toBe('original-refresh-token');
     expect(result.accessToken).toBe('fresh-access-token');
   });
@@ -189,7 +176,7 @@ describe('JWT callback', () => {
     const result = await jwtCallback(expiredToken, refreshGoogleAccessToken, mockFetch as unknown as typeof fetch);
 
     expect(result.error).toBe('RefreshAccessTokenError');
-    // Original refresh token preserved for retry
+    
     expect(result.refreshToken).toBe('invalid-refresh-token');
   });
 
@@ -207,8 +194,6 @@ describe('JWT callback', () => {
     expect(result.error).toBe('RefreshAccessTokenError');
   });
 });
-
-// ─── Auth error type tests ────────────────────────────────────────────────────
 
 describe('AuthError types', () => {
   it('RefreshAccessTokenError is the correct sentinel value', () => {

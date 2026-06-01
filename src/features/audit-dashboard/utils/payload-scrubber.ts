@@ -1,21 +1,6 @@
-/**
- * Payload scrubber utilities — file reading and payload normalisation.
- *
- * Responsibilities:
- * - Async file content reading (browser FileReader API)
- * - Language detection from file extension
- * - Payload normalisation into a typed InputPayload
- * - Human-readable size formatting
- *
- * This module is intentionally free of UI concerns and validation logic
- * (validation lives in src/lib/validation.ts).
- */
+
 
 import type { InputPayload, InputSource } from '@/types/audit';
-
-// ---------------------------------------------------------------------------
-// Language detection map
-// ---------------------------------------------------------------------------
 
 const EXTENSION_TO_LANGUAGE: Record<string, string> = {
   '.ts': 'TypeScript',
@@ -53,37 +38,22 @@ const EXTENSION_TO_LANGUAGE: Record<string, string> = {
   '.svelte': 'Svelte',
 };
 
-/**
- * Detects the programming language from a file extension.
- * Falls back to "Unknown" for unrecognised extensions.
- */
 export function detectLanguage(extension: string): string {
   return EXTENSION_TO_LANGUAGE[extension.toLowerCase()] ?? 'Unknown';
 }
 
-/**
- * Extracts the file extension (including dot) from a filename.
- * Returns an empty string if no extension is found.
- */
 export function extractExtension(filename: string): string {
   const dotIndex = filename.lastIndexOf('.');
   if (dotIndex === -1 || dotIndex === filename.length - 1) return '';
   return filename.substring(dotIndex).toLowerCase();
 }
 
-/**
- * Formats a byte count into a human-readable string (e.g. "1.2 KB").
- */
 export function formatByteSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/**
- * Reads a File object as UTF-8 text asynchronously using the FileReader API.
- * Rejects with an Error if the read fails.
- */
 export function readFileAsync(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -102,13 +72,6 @@ export function readFileAsync(file: File): Promise<string> {
   });
 }
 
-/**
- * Normalises raw code content + optional filename into a typed InputPayload.
- *
- * @param content  Raw string content (from file read or paste)
- * @param filename Filename for file uploads; synthetic label for pastes
- * @param source   Where the input originated
- */
 export function normalizePayload(
   content: string,
   filename: string,

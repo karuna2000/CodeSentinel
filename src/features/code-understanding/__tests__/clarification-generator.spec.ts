@@ -1,6 +1,4 @@
-/**
- * Tests for the Clarification Generator.
- */
+
 
 import { describe, it, expect } from 'vitest';
 import {

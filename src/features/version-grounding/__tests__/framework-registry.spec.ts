@@ -1,6 +1,4 @@
-/**
- * Tests for the Framework Capability Registry.
- */
+
 
 import { describe, it, expect } from 'vitest';
 import {
@@ -97,7 +95,7 @@ describe('getAllApiPatterns', () => {
     const patterns = getAllApiPatterns();
     const deprecated = patterns.filter((p) => p.deprecatedInVersion !== null);
     expect(deprecated.length).toBeGreaterThan(0);
-    // ReactDOM.render is deprecated in React 18
+    
     expect(deprecated.some((p) => p.api === 'ReactDOM.render()')).toBe(true);
   });
 

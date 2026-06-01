@@ -1,6 +1,4 @@
-/**
- * Tests for the Dependency Extractor.
- */
+
 
 import { describe, it, expect } from 'vitest';
 import {

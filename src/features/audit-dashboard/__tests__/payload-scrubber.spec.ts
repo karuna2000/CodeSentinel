@@ -1,7 +1,4 @@
-/**
- * Tests for payload-scrubber utilities.
- * Covers: detectLanguage, extractExtension, formatByteSize, normalizePayload, readFileAsync
- */
+
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
@@ -12,9 +9,6 @@ import {
   readFileAsync,
 } from '@/features/audit-dashboard/utils/payload-scrubber';
 
-// ---------------------------------------------------------------------------
-// extractExtension
-// ---------------------------------------------------------------------------
 describe('extractExtension', () => {
   it('returns the extension with dot for standard filenames', () => {
     expect(extractExtension('auth.service.ts')).toBe('.ts');
@@ -37,9 +31,6 @@ describe('extractExtension', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// detectLanguage
-// ---------------------------------------------------------------------------
 describe('detectLanguage', () => {
   it('maps known extensions to human-readable language labels', () => {
     expect(detectLanguage('.ts')).toBe('TypeScript');
@@ -59,9 +50,6 @@ describe('detectLanguage', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// formatByteSize
-// ---------------------------------------------------------------------------
 describe('formatByteSize', () => {
   it('formats bytes under 1024 as "N B"', () => {
     expect(formatByteSize(0)).toBe('0 B');
@@ -81,9 +69,6 @@ describe('formatByteSize', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// normalizePayload
-// ---------------------------------------------------------------------------
 describe('normalizePayload', () => {
   const sample = `import { Injectable } from '@nestjs/common';\n\n@Injectable()\nexport class AuthService {}`;
 
@@ -126,11 +111,8 @@ describe('normalizePayload', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// readFileAsync — uses a FileReader mock (FileReader is browser-only, node env)
-// ---------------------------------------------------------------------------
 describe('readFileAsync', () => {
-  // Minimal FileReader mock that synchronously calls onload with the text
+  
   function makeFileReaderMock(resolvedText: string) {
     return class MockFileReader {
       result: string | null = null;
@@ -145,7 +127,7 @@ describe('readFileAsync', () => {
   }
 
   beforeEach(() => {
-    // Default mock resolves with the file content stub
+    
     vi.stubGlobal('FileReader', makeFileReaderMock('const hello = "world";\n'));
   });
 

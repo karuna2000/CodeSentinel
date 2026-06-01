@@ -40,13 +40,13 @@ export function GoogleSignInButton({ callbackUrl = '/', className = '' }: Google
       `}
     >
       {isLoading ? (
-        /* Loading spinner */
+        
         <span
           className="w-5 h-5 rounded-full border-2 border-[var(--border2)] border-t-[var(--accent)] animate-spin"
           aria-hidden="true"
         />
       ) : (
-        /* Google "G" logo SVG */
+        
         <svg
           aria-hidden="true"
           width="18"

@@ -1,6 +1,4 @@
-/**
- * Tests for the Grounding Context Builder.
- */
+
 
 import { describe, it, expect } from 'vitest';
 import {

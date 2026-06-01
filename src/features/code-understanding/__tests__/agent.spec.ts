@@ -1,7 +1,4 @@
-/**
- * Integration tests for the Code Understanding Agent (full pipeline).
- * Tests runCodeUnderstandingAgent() end-to-end with realistic code samples.
- */
+
 
 import { describe, it, expect } from 'vitest';
 import { runCodeUnderstandingAgent } from '@/features/code-understanding/agent';

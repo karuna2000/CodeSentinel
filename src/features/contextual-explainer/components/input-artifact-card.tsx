@@ -4,10 +4,6 @@ import React, { useState } from "react";
 import type { CodeLine, CodePin } from "./code-panel";
 import type { ArtifactSource } from "@/types/artifact";
 
-// ---------------------------------------------------------------------------
-// Props
-// ---------------------------------------------------------------------------
-
 interface InputArtifactCardProps {
   filename: string;
   language: string;
@@ -18,10 +14,6 @@ interface InputArtifactCardProps {
   pins: Record<number, CodePin>;
   onViewInPanel: () => void;
 }
-
-// ---------------------------------------------------------------------------
-// Source badge config
-// ---------------------------------------------------------------------------
 
 const SOURCE_CONFIG: Record<ArtifactSource, { icon: string; label: string; badgeClass: string }> = {
   upload: {
@@ -38,10 +30,6 @@ const SOURCE_CONFIG: Record<ArtifactSource, { icon: string; label: string; badge
   },
 };
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
 export const InputArtifactCard = React.memo(function InputArtifactCard({
   filename,
   language,
@@ -55,18 +43,18 @@ export const InputArtifactCard = React.memo(function InputArtifactCard({
   const [expanded, setExpanded] = useState(false);
   const { icon, label, badgeClass } = SOURCE_CONFIG[source];
 
-  // Truncate for performance
+  
   const MAX_LINES = 1000;
   const isTruncated = codeLines.length > MAX_LINES;
   const renderedLines = isTruncated ? codeLines.slice(0, MAX_LINES) : codeLines;
 
   return (
     <div className="bg-[var(--card)] border border-[var(--border)] rounded-[2px_12px_12px_12px] overflow-hidden shadow-[0_1px_3px_rgba(0,0,0,0.05)] max-w-[520px]">
-      {/* ── Header ── */}
+      {}
       <div className="flex items-center gap-[10px] p-[10px_13px] bg-[var(--surface)] border-b border-[var(--border)]">
         <span className="text-[15px]">{icon}</span>
 
-        {/* Metadata */}
+        {}
         <div className="flex-1 min-w-0">
           <div className="font-code text-[12px] font-semibold text-[var(--text)] truncate">
             {filename}
@@ -78,14 +66,14 @@ export const InputArtifactCard = React.memo(function InputArtifactCard({
             <span className="text-[var(--border2)]">·</span>
             <span>{size}</span>
             <span className="text-[var(--border2)]">·</span>
-            {/* Source badge */}
+            {}
             <span className={`font-code text-[9px] px-[6px] py-[1px] rounded-[3px] font-semibold tracking-[0.04em] ${badgeClass}`}>
               {label}
             </span>
           </div>
         </div>
 
-        {/* Actions */}
+        {}
         <div className="flex gap-[6px] shrink-0">
           <button
             onClick={onViewInPanel}
@@ -102,7 +90,7 @@ export const InputArtifactCard = React.memo(function InputArtifactCard({
         </div>
       </div>
 
-      {/* ── Code Preview ── */}
+      {}
       <div
         className={`overflow-hidden transition-[max-height] duration-350 ease-[cubic-bezier(0.4,0,0.2,1)] relative ${
           expanded ? "max-h-[500px]" : "max-h-[130px]"
@@ -144,13 +132,13 @@ export const InputArtifactCard = React.memo(function InputArtifactCard({
           )}
         </div>
 
-        {/* Fade gradient when collapsed */}
+        {}
         {!expanded && codeLines.length > 0 && (
           <div className="absolute bottom-0 left-0 right-0 h-[40px] bg-gradient-to-b from-transparent to-[var(--bg)] pointer-events-none" />
         )}
       </div>
 
-      {/* ── Expand / Collapse footer ── */}
+      {}
       {codeLines.length > 0 && (
         <button
           onClick={() => setExpanded(!expanded)}

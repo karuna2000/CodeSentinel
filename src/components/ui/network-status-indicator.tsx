@@ -6,7 +6,7 @@ export function NetworkStatusIndicator() {
   const [isOffline, setIsOffline] = useState(false);
 
   useEffect(() => {
-    // Initial check
+    
     if (typeof window !== "undefined") {
       setIsOffline(!window.navigator.onLine);
     }

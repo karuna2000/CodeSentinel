@@ -17,7 +17,6 @@ const mockUnderstanding: CodeUnderstandingOutput = {
   versionGrounding: null
 };
 
-// Mock the AI module entirely
 vi.mock('ai', async (importOriginal) => {
   const actual = await importOriginal<typeof import('ai')>();
   return {
