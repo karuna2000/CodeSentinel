@@ -11,3 +11,5 @@ node_modules
 .env.example
 /features
 test-screenshot.mjs
+architecture.md
+architecture_flow.md
