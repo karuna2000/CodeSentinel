@@ -1,24 +1,4 @@
-import hljs from 'highlight.js/lib/core';
-import javascript from 'highlight.js/lib/languages/javascript';
-import typescript from 'highlight.js/lib/languages/typescript';
-import xml from 'highlight.js/lib/languages/xml';
-// Honeypot languages to accurately detect and reject non-JS/TS code
-import python from 'highlight.js/lib/languages/python';
-import go from 'highlight.js/lib/languages/go';
-import java from 'highlight.js/lib/languages/java';
-import rust from 'highlight.js/lib/languages/rust';
-import bash from 'highlight.js/lib/languages/bash';
-
-// Register only the languages we care about (plus XML for JSX/TSX support)
-hljs.registerLanguage('javascript', javascript);
-hljs.registerLanguage('typescript', typescript);
-hljs.registerLanguage('xml', xml);
-// Register honeypots so highlight.js doesn't shoehorn Python into JS
-hljs.registerLanguage('python', python);
-hljs.registerLanguage('go', go);
-hljs.registerLanguage('java', java);
-hljs.registerLanguage('rust', rust);
-hljs.registerLanguage('bash', bash);
+import hljs from 'highlight.js';
 
 export interface VirtualFilename {
   filename: string;
@@ -37,8 +17,11 @@ export function generateVirtualFilename(content: string): VirtualFilename {
   // We test a subset of the string for performance
   const sample = content.slice(0, 1500);
 
-  // highlightAuto will ONLY score against the registered languages
-  const result = hljs.highlightAuto(sample);
+  // highlightAuto will ONLY score against the specified languages to avoid false positives and maintain performance
+  const result = hljs.highlightAuto(sample, [
+    'javascript', 'typescript', 'xml', 
+    'python', 'go', 'java', 'rust', 'bash'
+  ]);
 
   // If the score is very low, it's likely plain text or a chat message
   if (result.relevance < 2 || !result.language) {
