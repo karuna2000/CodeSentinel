@@ -378,6 +378,4 @@ Open [http://localhost:3000](http://localhost:3000). You will be redirected to G
 
 ---
 
-## 📄 License
 
-This project is private and not licensed for redistribution.
