@@ -10,8 +10,8 @@ const jetbrains = JetBrains_Mono({ subsets: ["latin"], weight: ["300", "400", "5
 const lora = Lora({ subsets: ["latin"], weight: ["400", "500"], style: ['normal', 'italic'], variable: '--font-body' });
 
 export const metadata: Metadata = {
-  title: "AgentReview — Chat Mode",
-  description: "Secure Code Review Agent platform",
+  title: "CodeSentinel — Repository Intelligence",
+  description: "Automated codebase wiki, repository graph, and AI-powered context engine",
 };
 
 export default async function RootLayout({

@@ -7,9 +7,9 @@ export const nvidiaProvider = createOpenAI({
 });
 
 export function getDefaultReasoningModel() {
-  return nvidiaProvider.chat('minimaxai/minimax-m2.7');
+  return nvidiaProvider.chat('meta/llama-3.2-11b-vision-instruct');
 }
 
 export function getDefaultChatModel() {
-  return nvidiaProvider.chat('minimaxai/minimax-m2.7');
+  return nvidiaProvider.chat('meta/llama-3.2-11b-vision-instruct');
 }

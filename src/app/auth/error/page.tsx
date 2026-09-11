@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 export const metadata: Metadata = {
-  title: 'Auth Error — AgentReview',
+  title: 'Auth Error — CodeSentinel',
 };
 
 export default function AuthErrorPage() {

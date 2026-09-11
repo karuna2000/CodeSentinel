@@ -3,8 +3,8 @@ import type { SearchParams } from '@/types/common.types';
 import { SignInView } from './sign-in-view';
 
 export const metadata: Metadata = {
-  title: 'Sign In — AgentReview',
-  description: 'Authenticate to access the AgentReview secure code analysis platform.',
+  title: 'Sign In — CodeSentinel',
+  description: 'Authenticate to access the CodeSentinel repository intelligence platform.',
 };
 
 interface SignInPageProps {

@@ -1,0 +1,236 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
+}
+
+model GithubInstallation {
+  id              String   @id @default(uuid())
+  installation_id BigInt   @unique
+  user_id         String
+  account_name    String
+  created_at      DateTime @default(now())
+
+  @@map("github_installations")
+}
+
+model Repository {
+  id             String    @id @default(uuid())
+  github_repo_id BigInt    @unique
+  name           String
+  owner          String
+  default_branch String    @default("main")
+  language       String?
+  description    String?
+  stars          Int       @default(0)
+  is_indexed     Boolean   @default(false)
+  file_count     Int       @default(0)
+  readme_content String?
+  user_id        String
+  commit_sha     String? // HEAD commit SHA at last index
+  last_synced    DateTime?
+  created_at     DateTime  @default(now())
+
+  files       File[]
+  graph_nodes GraphNode[]
+  graph_edges GraphEdge[]
+  wiki_pages  WikiPage[]
+  diagrams    Diagram[]
+
+  @@map("repositories")
+}
+
+model File {
+  id           String   @id @default(uuid())
+  repo_id      String
+  path         String
+  content_hash String?
+  size         BigInt?
+  created_at   DateTime @default(now())
+
+  repository  Repository  @relation(fields: [repo_id], references: [id], onDelete: Cascade)
+  graph_nodes GraphNode[]
+
+  @@unique([repo_id, path])
+  @@map("files")
+}
+
+enum GraphNodeType {
+  REPO
+  FOLDER
+  FILE
+  FUNCTION
+  CLASS
+  INTERFACE
+  TYPE
+  ROUTE
+  COMPONENT
+  VARIABLE
+
+  @@map("graph_node_type")
+}
+
+model GraphNode {
+  id            String        @id @default(uuid())
+  repo_id       String
+  file_id       String?
+  type          GraphNodeType
+  name          String
+  code_snippet  String?
+  signature     String? // declaration summary (e.g. "export async function getSession(...)")
+  documentation String? // extracted doc comments
+  start_line    Int?
+  end_line      Int?
+  start_byte    Int?
+  end_byte      Int?
+  content_hash  String? // sha256 of snippet+signature+type for change detection
+  index_version Int           @default(1)
+  created_at    DateTime      @default(now())
+
+  // Vector embedding (pgvector)
+  embedding Unsupported("vector(384)")?
+
+  repository Repository @relation(fields: [repo_id], references: [id], onDelete: Cascade)
+  file       File?      @relation(fields: [file_id], references: [id], onDelete: Cascade)
+
+  // Relations for edges
+  source_edges GraphEdge[] @relation("SourceNode")
+  target_edges GraphEdge[] @relation("TargetNode")
+
+  @@index([repo_id])
+  @@index([file_id])
+  // Using Prisma 5's generic indexing for unsupported types requires raw SQL or specific extensions,
+  // but we will add the HNSW/IVFFlat index in a migration or raw SQL query later.
+  @@map("graph_nodes")
+}
+
+enum GraphEdgeType {
+  CONTAINS
+  IMPORTS
+  CALLS
+  INHERITS
+  READS_STORE
+  FETCHES_ROUTE
+
+  @@map("graph_edge_type")
+}
+
+model GraphEdge {
+  id             String        @id @default(uuid())
+  repo_id        String
+  source_node_id String
+  target_node_id String
+  type           GraphEdgeType
+  source_line    Int? // line in the source file where this edge originates
+  source_file    String? // file where the edge originates (the source node's file)
+  metadata       Json? // rich edge data (call expression, import path, etc.)
+  created_at     DateTime      @default(now())
+
+  repository  Repository @relation(fields: [repo_id], references: [id], onDelete: Cascade)
+  source_node GraphNode  @relation("SourceNode", fields: [source_node_id], references: [id], onDelete: Cascade)
+  target_node GraphNode  @relation("TargetNode", fields: [target_node_id], references: [id], onDelete: Cascade)
+
+  @@index([repo_id])
+  @@index([source_node_id])
+  @@index([target_node_id])
+  @@map("graph_edges")
+}
+
+// ── Wiki Generator (M4) ─────────────────────────────────────────────────────
+
+enum DiagramType {
+  FLOWCHART
+  SEQUENCE
+  ER
+  COMPONENT
+
+  @@map("diagram_type")
+}
+
+model WikiPage {
+  id         String   @id @default(uuid())
+  repo_id    String
+  path       String // folder path, e.g. "src/features/auth"
+  title      String
+  content    String // LLM-generated Markdown
+  commit_sha String? // repo HEAD commit SHA at generation time (NULL = pre-tracking)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  repository Repository @relation(fields: [repo_id], references: [id], onDelete: Cascade)
+
+  @@unique([repo_id, path])
+  @@index([repo_id])
+  @@map("wiki_pages")
+}
+
+model Diagram {
+  id          String      @id @default(uuid())
+  repo_id     String
+  path        String? // folder this diagram covers; null = whole repo
+  type        DiagramType
+  mermaid_src String // raw Mermaid DSL
+  commit_sha  String? // repo HEAD commit SHA at generation time (NULL = pre-tracking)
+  created_at  DateTime    @default(now())
+  updated_at  DateTime    @updatedAt
+
+  repository Repository @relation(fields: [repo_id], references: [id], onDelete: Cascade)
+
+  @@index([repo_id])
+  @@map("diagrams")
+}
+
+// ── Background Jobs (M4/M5) ─────────────────────────────────────────────────
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+
+  @@map("job_status")
+}
+
+model GenerationJob {
+  id           String    @id @default(uuid())
+  repo_id      String
+  user_id      String
+  type         String    @default("wiki") // what the job produces (e.g. "wiki")
+  status       JobStatus @default(PENDING)
+  step         String? // human-readable current step shown to the user
+  progress     Int       @default(0) // 0–100
+  total        Int?
+  error        String?
+  wiki_pages   Int?
+  diagram      Boolean?
+  created_at   DateTime  @default(now())
+  started_at   DateTime?
+  completed_at DateTime?
+
+  @@index([status])
+  @@index([user_id])
+  @@index([repo_id])
+  @@map("generation_jobs")
+}
+
+// ── Cost Metering (M4/M5) ─────────────────────────────────────────────────────
+
+model LlmUsage {
+  id            String   @id @default(uuid())
+  user_id       String
+  repo_id       String?
+  feature       String // "reasoning" | "chat" | "intent-detect" | "wiki"
+  model         String?
+  input_tokens  Int
+  output_tokens Int
+  total_tokens  Int
+  created_at    DateTime @default(now())
+
+  @@index([user_id, created_at])
+  @@map("llm_usage")
+}

@@ -13,3 +13,11 @@ node_modules
 test-screenshot.mjs
 architecture.md
 architecture_flow.md
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+
+# Secrets & signing keys
+*.pem
+*.key

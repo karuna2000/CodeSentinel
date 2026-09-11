@@ -18,12 +18,12 @@ const NEXTAUTH_PATHS = [
 ];
 
 export default withAuth(
-  function middleware(req) {
+  async function middleware(req) {
     const { pathname } = req.nextUrl;
 
     if (NEXTAUTH_PATHS.some((p) => pathname.startsWith(p))) {
       const ip = req.headers.get('x-forwarded-for') || (req as any).ip || '127.0.0.1';
-      const { allowed, retryAfterMs } = checkRateLimit(`auth:${ip}`);
+      const { allowed, retryAfterMs } = await checkRateLimit(`auth:${ip}`);
       if (!allowed) {
         logger.warn('[Middleware]', `Rate limit hit on auth route for IP ${ip}`);
         const retryAfterSec = Math.ceil(retryAfterMs / 1000);

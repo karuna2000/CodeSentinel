@@ -20,7 +20,7 @@ interface MockOAuthTokenResponse {
 
 async function refreshGoogleAccessToken(
   token: MockJWT,
-  fetchFn: typeof fetch
+  fetchFn: typeof globalThis.fetch
 ): Promise<MockJWT> {
   try {
     const response = await fetchFn('https://oauth2.googleapis.com/token', {
@@ -53,8 +53,8 @@ async function refreshGoogleAccessToken(
 
 async function jwtCallback(
   token: MockJWT,
-  refreshFn: (t: MockJWT, fetch: typeof fetch) => Promise<MockJWT>,
-  fetchFn: typeof fetch,
+  refreshFn: (t: MockJWT, fetch: typeof globalThis.fetch) => Promise<MockJWT>,
+  fetchFn: typeof globalThis.fetch,
   account?: { access_token: string; expires_at: number; refresh_token: string },
   user?: { id: string }
 ): Promise<MockJWT> {
@@ -127,7 +127,7 @@ describe('JWT callback', () => {
       } satisfies MockOAuthTokenResponse),
     } as unknown as Response);
 
-    const result = await jwtCallback(expiredToken, refreshGoogleAccessToken, mockFetch as unknown as typeof fetch);
+    const result = await jwtCallback(expiredToken, refreshGoogleAccessToken, mockFetch as unknown as typeof globalThis.fetch);
 
     expect(mockFetch).toHaveBeenCalledOnce();
     expect(result.accessToken).toBe('new-access-token');
@@ -153,7 +153,7 @@ describe('JWT callback', () => {
       } satisfies MockOAuthTokenResponse),
     } as unknown as Response);
 
-    const result = await jwtCallback(expiredToken, refreshGoogleAccessToken, mockFetch as unknown as typeof fetch);
+    const result = await jwtCallback(expiredToken, refreshGoogleAccessToken, mockFetch as unknown as typeof globalThis.fetch);
 
     
     expect(result.refreshToken).toBe('original-refresh-token');
@@ -173,7 +173,7 @@ describe('JWT callback', () => {
       statusText: 'Bad Request',
     } as Response);
 
-    const result = await jwtCallback(expiredToken, refreshGoogleAccessToken, mockFetch as unknown as typeof fetch);
+    const result = await jwtCallback(expiredToken, refreshGoogleAccessToken, mockFetch as unknown as typeof globalThis.fetch);
 
     expect(result.error).toBe('RefreshAccessTokenError');
     
@@ -189,7 +189,7 @@ describe('JWT callback', () => {
 
     const mockFetch = vi.fn().mockRejectedValue(new Error('Network error'));
 
-    const result = await jwtCallback(expiredToken, refreshGoogleAccessToken, mockFetch as unknown as typeof fetch);
+    const result = await jwtCallback(expiredToken, refreshGoogleAccessToken, mockFetch as unknown as typeof globalThis.fetch);
 
     expect(result.error).toBe('RefreshAccessTokenError');
   });

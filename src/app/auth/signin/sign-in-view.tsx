@@ -1,12 +1,12 @@
 'use client';
 
-import { GoogleSignInButton } from '@/features/auth/components/google-sign-in-button';
+import { GithubSignInButton } from '@/features/auth/components/github-sign-in-button';
 
 const ERROR_MESSAGES: Record<string, string> = {
   OAuthAccountNotLinked:
     'This email is already linked to a different sign-in method. Use the original provider.',
-  OAuthSignin: 'Failed to start the Google sign-in flow. Please try again.',
-  OAuthCallback: 'Error during Google authentication callback. Please try again.',
+  OAuthSignin: 'Failed to start the GitHub sign-in flow. Please try again.',
+  OAuthCallback: 'Error during GitHub authentication callback. Please try again.',
   OAuthCreateAccount: 'Could not create your account. Contact support if this persists.',
   AccessDenied: 'Access was denied. You may not have permission to use this application.',
   Verification: 'Sign-in link has expired or has already been used.',
@@ -36,7 +36,7 @@ export function SignInView({ error, callbackUrl = '/' }: SignInViewProps) {
       />
 
       <main
-        aria-label="Sign in to AgentReview"
+        aria-label="Sign in to CodeSentinel"
         className="relative z-10 w-full max-w-[400px]"
       >
         {}
@@ -46,13 +46,13 @@ export function SignInView({ error, callbackUrl = '/' }: SignInViewProps) {
           <header className="flex flex-col items-center gap-3 text-center">
             <div className="flex items-center gap-3">
               <span className="font-hd font-black text-[28px] text-[var(--text)] tracking-[-0.02em]">
-                AR
+                CS
               </span>
               <span
                 className="bg-[var(--accent)] text-white font-code text-[9px] font-semibold
                            px-[8px] py-[3px] rounded-[4px] tracking-[0.1em] uppercase"
               >
-                Review
+                Sentinel
               </span>
             </div>
 
@@ -61,7 +61,7 @@ export function SignInView({ error, callbackUrl = '/' }: SignInViewProps) {
                 Welcome back
               </h1>
               <p className="font-body text-[13px] text-[var(--muted)] leading-relaxed">
-                Sign in to continue to your secure code review workspace.
+                Sign in to continue to your repository intelligence workspace.
               </p>
             </div>
           </header>
@@ -81,7 +81,7 @@ export function SignInView({ error, callbackUrl = '/' }: SignInViewProps) {
 
           {}
           <div className="flex flex-col gap-4">
-            <GoogleSignInButton callbackUrl={callbackUrl} />
+            <GithubSignInButton callbackUrl={callbackUrl} />
 
             <p className="text-center font-code text-[10px] text-[var(--muted)] leading-relaxed px-2">
               By signing in you agree to our{' '}
@@ -119,7 +119,7 @@ export function SignInView({ error, callbackUrl = '/' }: SignInViewProps) {
 
         {}
         <p className="mt-4 text-center font-code text-[10px] text-[var(--muted)]">
-          AgentReview · Secure Code Analysis Platform
+          CodeSentinel · Repository Intelligence Platform
         </p>
       </main>
     </div>

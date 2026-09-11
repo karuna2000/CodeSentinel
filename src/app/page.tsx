@@ -1,17 +1,7 @@
-import { getServerSession } from "next-auth";
-import { redirect } from "next/navigation";
-import { authOptions } from "@/lib/auth";
-import ChatView from "./chat-view";
+import { redirect } from 'next/navigation';
 
-export default async function DashboardPage() {
-  
-  
-  
-  const session = await getServerSession(authOptions);
-
-  if (!session) {
-    redirect('/auth/signin?callbackUrl=/');
-  }
-
-  return <ChatView />;
+// The paste-and-review flow was removed; the app is now repo-intelligence only.
+// Middleware already enforces auth, so this simply routes authed users to the browser.
+export default function HomePage() {
+  redirect('/dashboard/repos');
 }

@@ -2,8 +2,6 @@
 
 import { describe, it, expect } from 'vitest';
 import { runVersionGrounding } from '@/features/version-grounding';
-import { runCodeUnderstandingAgent } from '@/features/code-understanding/agent';
-import type { InputArtifact } from '@/types/artifact';
 
 const REACT18_CODE = `import { useState, useTransition, createRoot } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -41,20 +39,6 @@ export async function POST(req: NextRequest) {
   const user = await prisma.user.create({ data: body });
   return NextResponse.json({ user }, { status: 201 });
 }`;
-
-function makeArtifact(content: string, filename = 'route.ts'): InputArtifact {
-  return {
-    id: 'test-001',
-    source: 'upload',
-    filename,
-    language: 'TypeScript',
-    content,
-    byteSize: new Blob([content]).size,
-    lineCount: content.split('\n').length,
-    formattedSize: '2.0 KB',
-    createdAt: new Date().toISOString(),
-  };
-}
 
 describe('runVersionGrounding — empty frameworks', () => {
   it('returns empty output when no frameworks passed', () => {
@@ -158,56 +142,5 @@ describe('runVersionGrounding — output shape', () => {
       'const x = 1;', 
     );
     expect(output.versionClarificationQuestions.length).toBeLessThanOrEqual(2);
-  });
-});
-
-describe('runCodeUnderstandingAgent — versionGrounding integration', () => {
-  it('attaches versionGrounding to output for Next.js code', () => {
-    const artifact = makeArtifact(NEXTJS_APP_ROUTER_CODE, 'route.ts');
-    const output = runCodeUnderstandingAgent(artifact);
-    expect(output.versionGrounding).not.toBeNull();
-    expect(output.versionGrounding!.frameworks.length).toBeGreaterThan(0);
-  });
-
-  it('versionGrounding includes Next.js App Router version', () => {
-    const artifact = makeArtifact(NEXTJS_APP_ROUTER_CODE, 'route.ts');
-    const output = runCodeUnderstandingAgent(artifact);
-    const next = output.versionGrounding!.frameworks.find((f) => f.framework === 'Next.js');
-    expect(next).toBeDefined();
-    expect(next!.versionInference.label).toContain('App Router');
-  });
-
-  it('versionGrounding includes Prisma when @prisma/client is imported', () => {
-    const artifact = makeArtifact(NEXTJS_APP_ROUTER_CODE, 'route.ts');
-    const output = runCodeUnderstandingAgent(artifact);
-    const prismaEntry = output.versionGrounding!.frameworks.find((f) => f.framework === 'Prisma');
-    expect(prismaEntry).toBeDefined();
-  });
-
-  it('groundingSources contains react.dev or nextjs.org docs', () => {
-    const artifact = makeArtifact(NEXTJS_APP_ROUTER_CODE, 'route.ts');
-    const output = runCodeUnderstandingAgent(artifact);
-    const urls = output.versionGrounding!.groundingSources.map((s) => s.url);
-    const hasGrounding = urls.some(
-      (u) => u.includes('nextjs.org') || u.includes('react.dev') || u.includes('prisma.io'),
-    );
-    expect(hasGrounding).toBe(true);
-  });
-
-  it('versionGrounding is null when no framework detected', () => {
-    
-    const code = 'export function clamp(v: number, min: number, max: number) { return Math.min(Math.max(v, min), max); }';
-    const artifact = makeArtifact(code, 'math.ts');
-    const output = runCodeUnderstandingAgent(artifact);
-    
-    if (output.versionGrounding !== null) {
-      expect(output.versionGrounding.frameworks.length).toBe(0);
-    }
-  });
-
-  it('output always has versionGrounding property', () => {
-    const artifact = makeArtifact('const x = 1;', 'x.ts');
-    const output = runCodeUnderstandingAgent(artifact);
-    expect(output).toHaveProperty('versionGrounding');
   });
 });
