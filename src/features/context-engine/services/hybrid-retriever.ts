@@ -44,9 +44,15 @@ export async function retrieveContext(
   const nodesById = new Map<string, GraphNode>();
   const fusedScores = new Map<string, number>();
 
-  // ── 1. Keyword / Lexical Search (weighted Postgres FTS) ───────────────
+  // ── 1. Keyword / Lexical Search (weighted Postgres FTS + identifier substring) ─
   if (searchTerms.length > 0) {
     const termQuery = searchTerms.join(' | ');
+    // Postgres's `simple` dictionary treats camelCase/PascalCase identifiers as
+    // single lexemes ("AsyncClient" → "asyncclient"), so FTS alone misses symbol
+    // names for common terms like "client" or "db". Add substring containment on
+    // name/signature so identifier fragments are retrievable (ranked below full
+    // lexeme matches via NULLS LAST).
+    const likePatterns = searchTerms.map((t) => `%${t.toLowerCase()}%`);
     const rankedKeyword = await db.$queryRaw<GraphNode[]>`
       SELECT id, repo_id, file_id, type, name, code_snippet, signature, documentation,
              start_line, end_line, start_byte, end_byte, content_hash, created_at,
@@ -64,8 +70,10 @@ export async function retrieveContext(
         OR to_tsvector('simple', coalesce(signature, '')) @@ websearch_to_tsquery('simple', ${termQuery})
         OR to_tsvector('english', coalesce(documentation, '')) @@ websearch_to_tsquery('simple', ${termQuery})
         OR to_tsvector('simple', coalesce(code_snippet, '')) @@ websearch_to_tsquery('simple', ${termQuery})
+        OR lower(name) LIKE ANY (${likePatterns})
+        OR lower(signature) LIKE ANY (${likePatterns})
       )
-      ORDER BY rank DESC
+      ORDER BY rank DESC NULLS LAST
       LIMIT ${MAX_KEYWORD}
     `;
 

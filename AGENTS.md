@@ -36,7 +36,7 @@ npm run db:migrate:dev     # Create + apply migration in dev (checks into prisma
 npm run db:status          # Show migration status
 ```
 
-**Run evals early and often.** `src/evals/**` is the only gate that exercises real retriever/ranker prompt behavior end-to-end (needs a live `NVIDIA_API_KEY` + local DB). Run `npm run eval` whenever retrieval, ranking, budget, or prompt construction changes — not just at milestone end — since typecheck/unit/e2e can pass while retrieval quality silently regresses.
+**Run evals early and often.** `src/evals/**` is the only gate that exercises real retriever/ranker prompt behavior end-to-end (needs a live `NVIDIA_API_KEY` + local DB). Run `npm run eval` whenever retrieval, ranking, budget, or prompt construction changes — not just at milestone end — since typecheck/unit/e2e can pass while retrieval quality silently regresses. Set `EVAL_REPO_ID=<graph_node repo id>` to choose the fixture (a repo actually indexed in the local DB, e.g. `b553270d-…`); the retrieval eval resolves expected nodes from the fixture's own symbol names and auto-skips cases the repo can't answer. Chat/wiki evals call NVIDIA directly — they will 401 until `.env.local` holds a valid key. Vitest v4 does not autoload `.env.local` (only plain `NVIDIA_API_KEY`/`EVAL_REPO_ID` exports), but the app itself loads it via Next.
 
 CI (`.github/workflows/ci.yml`): `typecheck` + `test` + `build` are hard gates. `lint-changed` lints only files changed in the event (no new lint errors). Full-repo `lint-report` and `e2e` jobs run with `continue-on-error: true` (non-blocking) — the repo still carries ~230 pre-existing lint errors and the smoke suite is best-effort.
 
