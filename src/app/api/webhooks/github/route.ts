@@ -12,7 +12,6 @@ const webhooks = new Webhooks({
 export async function POST(request: Request) {
   try {
     const signature = request.headers.get('x-hub-signature-256') || '';
-    const id = request.headers.get('x-github-delivery') || '';
     const name = request.headers.get('x-github-event') || '';
 
     const bodyText = await request.text();

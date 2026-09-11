@@ -22,13 +22,13 @@ const VERSION_QUESTIONS: Record<string, (versionHint: string | null) => string> 
       ? 'Is this Vue 3 Composition API or Vue 2 Options API?'
       : 'Which version of Vue is this project using (Vue 2 or Vue 3)?',
 
-  'Express': (_hint) =>
+  'Express': () =>
     'Which version of Express is this project using (Express 4 or Express 5)?',
 
-  'Angular': (_hint) =>
+  'Angular': () =>
     'Which version of Angular is this project using (e.g. Angular 16, 17)?',
 
-  'NestJS': (_hint) =>
+  'NestJS': () =>
     'Which version of NestJS is this project using (e.g. NestJS 9, 10)?',
 
   'Prisma': (hint) =>
@@ -36,7 +36,7 @@ const VERSION_QUESTIONS: Record<string, (versionHint: string | null) => string> 
       ? `Is this Prisma ${hint} code?`
       : 'Which version of Prisma is this project using (e.g. Prisma 4, 5)?',
 
-  'FastAPI': (_hint) =>
+  'FastAPI': () =>
     'Which version of FastAPI is this project using (e.g. FastAPI 0.100+)?',
 };
 

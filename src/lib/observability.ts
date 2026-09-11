@@ -14,7 +14,7 @@ export const langfuse =
 /**
  * Traces a custom event.
  */
-export function traceEvent(name: string, metadata?: Record<string, any>) {
+export function traceEvent(name: string, metadata?: Record<string, unknown>) {
   if (langfuse) {
     langfuse.trace({
       name,

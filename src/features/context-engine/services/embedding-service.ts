@@ -1,4 +1,4 @@
-import { pipeline, env } from '@xenova/transformers';
+import { pipeline, env, type FeatureExtractionPipeline } from '@xenova/transformers';
 
 // Configure Transformers.js to not use local models since Next.js build environment can be tricky with it.
 // It will download the models to a cache directory on first run.
@@ -8,11 +8,15 @@ env.allowLocalModels = false;
 class PipelineSingleton {
   static task = 'feature-extraction';
   static model = 'Xenova/bge-small-en-v1.5';
-  static instance: any = null;
+  static instance: FeatureExtractionPipeline | null = null;
 
-  static async getInstance(progress_callback?: any) {
+  static async getInstance(progress_callback?: (progress: unknown) => void) {
     if (this.instance === null) {
-      this.instance = pipeline(this.task as any, this.model, { progress_callback });
+      this.instance = await pipeline(
+        this.task as 'feature-extraction',
+        this.model,
+        { progress_callback },
+      );
     }
     return this.instance;
   }

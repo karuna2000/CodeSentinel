@@ -3,25 +3,6 @@
 import type { VersionInference, ApiPatternMatch } from '@/types/version-grounding';
 import { getFrameworkEntry, getAllApiPatterns } from './framework-registry';
 
-const EXPLICIT_VERSION_PATTERNS: Array<{
-  regex: RegExp;
-  framework: string;
-  extract: (match: RegExpMatchArray) => string | null;
-}> = [
-  
-  {
-    regex: /[@]version\s+([\d.^~>=<]+)/i,
-    framework: 'explicit-comment',
-    extract: (m) => m[1] ?? null,
-  },
-  
-  {
-    regex: /"node"\s*:\s*"([^"]+)"/,
-    framework: 'Node.js',
-    extract: (m) => m[1] ?? null,
-  },
-];
-
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------

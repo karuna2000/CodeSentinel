@@ -1,26 +1,6 @@
 
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-
-function withEnv(vars: Record<string, string | undefined>, fn: () => void) {
-  const original: Record<string, string | undefined> = {};
-  for (const [key, value] of Object.entries(vars)) {
-    original[key] = process.env[key];
-    if (value === undefined) {
-      delete process.env[key];
-    } else {
-      process.env[key] = value;
-    }
-  }
-  try {
-    fn();
-  } finally {
-    for (const [key, value] of Object.entries(original)) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
-  }
-}
+import { describe, it, expect } from 'vitest';
 
 describe('env validation', () => {
   

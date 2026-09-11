@@ -22,7 +22,7 @@ export default withAuth(
     const { pathname } = req.nextUrl;
 
     if (NEXTAUTH_PATHS.some((p) => pathname.startsWith(p))) {
-      const ip = req.headers.get('x-forwarded-for') || (req as any).ip || '127.0.0.1';
+      const ip = req.headers.get('x-forwarded-for') || '127.0.0.1';
       const { allowed, retryAfterMs } = await checkRateLimit(`auth:${ip}`);
       if (!allowed) {
         logger.warn('[Middleware]', `Rate limit hit on auth route for IP ${ip}`);

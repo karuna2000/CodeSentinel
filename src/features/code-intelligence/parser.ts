@@ -1,14 +1,6 @@
 import path from 'path';
 import type { Parser as ParserType, Language as LanguageType } from 'web-tree-sitter';
-
-// web-tree-sitter v0.27 CJS exports named classes: Parser, Language, etc.
-// DO NOT do: const Parser = require('web-tree-sitter') — that's not the Parser class.
-// The module shape is: { Parser, Language, Query, Tree, ... }
-const wts = require('web-tree-sitter') as {
-  Parser: (new () => ParserType) & { init: (opts?: object) => Promise<void> };
-  Language: { load: (path: string) => Promise<LanguageType> };
-  Query: new (language: LanguageType, source: string) => { matches: (node: any) => any[] };
-};
+import * as wts from 'web-tree-sitter';
 
 let parserInitialized = false;
 

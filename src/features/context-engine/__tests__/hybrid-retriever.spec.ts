@@ -17,7 +17,6 @@ vi.mock('../services/embedding-service', () => ({
 import { db } from '@/lib/db';
 import { retrieveContext } from '../services/hybrid-retriever';
 
-type Db = typeof db;
 type NodeRow = {
   id: string;
   repo_id: string;
@@ -132,7 +131,6 @@ describe('hybrid-retriever — RRF fusion', () => {
 describe('hybrid-retriever — edge-type weighting', () => {
   it('skips CONTAINS in relationships but keeps IMPORTS and CALLS', async () => {
     const seed = makeNode('s', 'src/index.ts', 'FILE');
-    const sym = makeNode('x', 'getUser', 'FUNCTION');
     const dep = makeNode('t', 'src/db.ts', 'FILE');
     const callee = makeNode('u', 'src/utils.ts', 'FILE');
 

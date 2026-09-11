@@ -7,8 +7,6 @@ import {
   getAllApiPatterns,
   REACT_ENTRY,
   NEXTJS_ENTRY,
-  EXPRESS_ENTRY,
-  PRISMA_ENTRY,
 } from '@/features/version-grounding/framework-registry';
 
 describe('FRAMEWORK_REGISTRY — structure', () => {

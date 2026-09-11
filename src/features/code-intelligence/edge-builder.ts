@@ -1,5 +1,5 @@
 import type TreeSitter from 'web-tree-sitter';
-const Parser = require('web-tree-sitter');
+import * as wts from 'web-tree-sitter';
 
 export interface ExtractedEdge {
   type: 'IMPORTS' | 'CALLS' | 'READS_STORE' | 'FETCHES_ROUTE';
@@ -38,7 +38,6 @@ export function extractEdges(
   if (!queryString) return edges;
 
   try {
-    const wts = require('web-tree-sitter');
     const query = new wts.Query(language, queryString);
     const matches = query.matches(tree.rootNode);
 

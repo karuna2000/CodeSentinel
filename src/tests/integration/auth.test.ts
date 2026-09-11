@@ -1,6 +1,6 @@
 
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 interface MockJWT {
   sub?: string;
@@ -46,7 +46,7 @@ async function refreshGoogleAccessToken(
       accessTokenExpires: Date.now() + refreshed.expires_in * 1000,
       refreshToken: refreshed.refresh_token ?? token.refreshToken,
     };
-  } catch (error) {
+  } catch {
     return { ...token, error: 'RefreshAccessTokenError' };
   }
 }

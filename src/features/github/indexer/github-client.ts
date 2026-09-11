@@ -323,7 +323,7 @@ export async function indexRepository(
     if (readmeRes.data && 'content' in readmeRes.data) {
       readmeContent = Buffer.from(readmeRes.data.content, 'base64').toString('utf8');
     }
-  } catch (e) {
+  } catch {
     console.warn(`No README found for ${owner}/${repo}`);
   }
 

@@ -5,7 +5,6 @@ import type { NextAuthOptions, Session } from 'next-auth';
 import type { JWT } from 'next-auth/jwt';
 import GithubProvider from 'next-auth/providers/github';
 import { env } from '@/lib/env';
-import type { OAuthTokenResponse } from '@/types/auth.types';
 
 // Google token refresh logic removed as we are switching to GitHub
 // GitHub tokens typically don't require offline access/refresh tokens in the same way for basic auth,

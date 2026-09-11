@@ -20,7 +20,7 @@ The `src/stubs/` directories (`database/`, `entities/`, `server/`, `services/`, 
 ```bash
 npm run dev          # Next.js dev server
 npm run build        # Production build
-npm run lint         # ESLint 9 flat config
+npm run lint         # ESLint 9 flat config (must report 0 problems)
 npm run typecheck    # tsc --noEmit (must be 0 errors)
 npm run test         # vitest run (unit suite, excludes src/evals)
 npm run test:watch   # vitest (watch mode)
@@ -38,7 +38,7 @@ npm run db:status          # Show migration status
 
 **Run evals early and often.** `src/evals/**` is the only gate that exercises real retriever/ranker prompt behavior end-to-end (needs a live `NVIDIA_API_KEY` + local DB). Run `npm run eval` whenever retrieval, ranking, budget, or prompt construction changes — not just at milestone end — since typecheck/unit/e2e can pass while retrieval quality silently regresses. Set `EVAL_REPO_ID=<graph_node repo id>` to choose the fixture (a repo actually indexed in the local DB, e.g. `b553270d-…`); the retrieval eval resolves expected nodes from the fixture's own symbol names and auto-skips cases the repo can't answer. Chat/wiki evals call NVIDIA directly — they will 401 until `.env.local` holds a valid key. Vitest v4 does not autoload `.env.local` (only plain `NVIDIA_API_KEY`/`EVAL_REPO_ID` exports), but the app itself loads it via Next.
 
-CI (`.github/workflows/ci.yml`): `typecheck` + `test` + `build` are hard gates. `lint-changed` lints only files changed in the event (no new lint errors). Full-repo `lint-report` and `e2e` jobs run with `continue-on-error: true` (non-blocking) — the repo still carries ~230 pre-existing lint errors and the smoke suite is best-effort.
+CI (`.github/workflows/ci.yml`): `typecheck` + `test` + `build` are hard gates. `lint-changed` lints only files changed in the event (no new lint errors). Full-repo `lint-report` and `e2e` jobs run with `continue-on-error: true` (non-blocking) as a safety net — `npm run lint` is clean repo-wide (0 problems) and the smoke suite is best-effort.
 
 ## Architecture
 

@@ -1,6 +1,7 @@
 'use client';
 
 import { useSession, signOut } from 'next-auth/react';
+import Image from 'next/image';
 import { useState } from 'react';
 
 interface UserAvatarProps {
@@ -54,9 +55,12 @@ export function UserAvatar({ showSignOut = true }: UserAvatarProps) {
       >
         {image && !imageError ? (
           
-          <img
+          <Image
             src={image}
             alt={name ?? 'User avatar'}
+            width={30}
+            height={30}
+            unoptimized
             className="w-full h-full object-cover"
             referrerPolicy="no-referrer"
             onError={() => setImageError(true)}

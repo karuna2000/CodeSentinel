@@ -1,4 +1,5 @@
 import type TreeSitter from 'web-tree-sitter';
+import * as wts from 'web-tree-sitter';
 import crypto from 'crypto';
 
 export interface ExtractedSymbol {
@@ -99,7 +100,6 @@ export function extractSymbols(
   if (!queryString) return symbols;
 
   try {
-    const wts = require('web-tree-sitter');
     const query = new wts.Query(language, queryString);
     const matches = query.matches(tree.rootNode);
 
