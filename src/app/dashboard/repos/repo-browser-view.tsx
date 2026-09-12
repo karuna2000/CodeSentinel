@@ -39,14 +39,17 @@ export function RepoBrowserView({
   const [wikiGeneratingRepoId, setWikiGeneratingRepoId] = useState<string | null>(null);
   const [removingRepoId, setRemovingRepoId] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [connecting, setConnecting] = useState(false);
   const [selectedRepo, setSelectedRepo] = useState<Repository | null>(null);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
   const removeTimerRef = useRef<number | null>(null);
+  const connectTimerRef = useRef<number | null>(null);
 
   React.useEffect(() => {
     return () => {
       if (removeTimerRef.current !== null) window.clearTimeout(removeTimerRef.current);
+      if (connectTimerRef.current !== null) window.clearInterval(connectTimerRef.current);
     };
   }, []);
 
@@ -102,6 +105,37 @@ export function RepoBrowserView({
     } finally {
       setIsSyncing(false);
     }
+  };
+
+  // Open the GitHub App page, then keep watching until CodeSentinel sees the
+  // repos — the CodeSentinel tab returns on its own once access is granted.
+  const handleConnectGitHubApp = () => {
+    setConnecting(true);
+    window.open(installUrl, '_blank', 'noopener,noreferrer');
+
+    let tries = 0;
+    const iv = window.setInterval(async () => {
+      tries += 1;
+      try {
+        const res = await fetch('/api/github/repos');
+        const data = await res.json();
+        if (data.repositories) {
+          window.clearInterval(iv);
+          setConnecting(false);
+          setRepositories(data.repositories);
+          showToast('Repositories synchronized with GitHub App!');
+          return;
+        }
+      } catch {
+        // keep polling until the cap is reached
+      }
+      if (tries >= 24) {
+        window.clearInterval(iv);
+        setConnecting(false);
+        showToast('Still waiting for GitHub… open the page and grant access, then try this again.', 'error');
+      }
+    }, 5000);
+    connectTimerRef.current = iv;
   };
 
   // Trigger indexing on a single repository
@@ -230,15 +264,18 @@ export function RepoBrowserView({
             <span>{isSyncing ? 'Syncing…' : 'Sync Repos'}</span>
           </button>
 
-          <a
-            href={installUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--text)] text-[var(--bg)] hover:opacity-90 text-sm font-medium transition shadow-sm"
+          <button
+            onClick={handleConnectGitHubApp}
+            disabled={connecting}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--text)] text-[var(--bg)] hover:opacity-90 text-sm font-medium transition shadow-sm disabled:opacity-60"
           >
-            <span>➕</span>
-            <span>Connect GitHub App</span>
-          </a>
+            {connecting ? (
+              <span className="w-4 h-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
+            ) : (
+              <span>➕</span>
+            )}
+            <span>{connecting ? 'Waiting for GitHub…' : 'Connect GitHub App'}</span>
+          </button>
         </div>
       </header>
 
@@ -453,15 +490,19 @@ export function RepoBrowserView({
               : 'No repositories match your current filter and search query.'}
           </p>
           {repositories.length === 0 && (
-            <a
-              href={installUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[var(--text)] text-[var(--bg)] text-sm font-medium hover:opacity-90 transition"
+            <button
+              type="button"
+              onClick={handleConnectGitHubApp}
+              disabled={connecting}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[var(--text)] text-[var(--bg)] text-sm font-medium hover:opacity-90 transition disabled:opacity-60"
             >
-              <span>➕</span>
-              <span>Connect GitHub App</span>
-            </a>
+              {connecting ? (
+                <span className="w-4 h-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
+              ) : (
+                <span>➕</span>
+              )}
+              <span>{connecting ? 'Waiting for GitHub…' : 'Connect GitHub App'}</span>
+            </button>
           )}
         </div>
       )}

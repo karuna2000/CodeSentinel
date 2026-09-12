@@ -2,6 +2,7 @@
 
 import { signIn } from 'next-auth/react';
 import { useState } from 'react';
+import { GithubMark } from './github-mark';
 
 interface GithubSignInButtonProps {
   callbackUrl?: string;
@@ -28,38 +29,33 @@ export function GithubSignInButton({ callbackUrl = '/', className = '' }: Github
       aria-busy={isLoading}
       aria-label="Continue with GitHub"
       className={`
-        group relative flex items-center justify-center gap-3 w-full
-        px-5 py-3 rounded-[10px] border border-[var(--border)]
-        bg-[var(--card)] text-[var(--text)] font-code text-[13px] font-medium
-        transition-all duration-200
-        hover:border-[var(--border2)] hover:bg-[var(--surface)] hover:shadow-md
+        relative w-full h-[65px] border-none bg-white rounded-full
+        grid grid-cols-[48px_1fr_48px] items-center px-[21px]
+        cursor-pointer text-[var(--brand-ink)] font-sans
+        shadow-[0_3px_6px_rgba(10,20,15,0.02),0_9px_24px_rgba(20,40,30,0.025)]
+        transition-transform duration-150 transition-shadow duration-150
+        hover:-translate-y-0.5
+        hover:shadow-[0_5px_12px_rgba(10,20,15,0.04),0_14px_30px_rgba(20,40,30,0.05)]
         focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2
-        focus-visible:outline-[var(--accent)]
+        focus-visible:outline-[var(--brand-accent)]
         disabled:opacity-60 disabled:cursor-not-allowed
         ${className}
       `}
     >
-      {isLoading ? (
-        
-        <span
-          className="w-5 h-5 rounded-full border-2 border-[var(--border2)] border-t-[var(--accent)] animate-spin"
-          aria-hidden="true"
-        />
-      ) : (
-        
-        <svg
-          aria-hidden="true"
-          width="18"
-          height="18"
-          viewBox="0 0 16 16"
-          fill="currentColor"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" />
-        </svg>
-      )}
+      <span className="grid place-items-center">
+        {isLoading ? (
+          <span
+            className="w-[30px] h-[30px] rounded-full border-2 border-[var(--border2)] border-t-[var(--brand-green)] animate-spin"
+            aria-hidden="true"
+          />
+        ) : (
+          <GithubMark className="h-[30px] w-[30px] text-[#080808]" />
+        )}
+      </span>
 
-      <span>{isLoading ? 'Signing in…' : 'Continue with GitHub'}</span>
+      <span className="text-center font-semibold text-[16px]">
+        {isLoading ? 'Signing in…' : 'Sign in with GitHub'}
+      </span>
     </button>
   );
 }

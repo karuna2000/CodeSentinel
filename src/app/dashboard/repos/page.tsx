@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { env } from '@/lib/env';
+import GitHubConnectScreen from '@/features/connect/components/github-connect-screen';
 import { RepoBrowserView, Repository } from './repo-browser-view';
 
 export const metadata = {
@@ -37,6 +38,16 @@ export default async function RepoBrowserPage() {
   }
 
   const installUrl = `https://github.com/apps/${env.githubAppName}/installations/new`;
+
+  // First-run: no repos linked yet — show the connect/onboarding screen.
+  if (repositories.length === 0) {
+    return (
+      <GitHubConnectScreen
+        username={session.user.name || undefined}
+        installUrl={installUrl}
+      />
+    );
+  }
 
   return (
     <RepoBrowserView

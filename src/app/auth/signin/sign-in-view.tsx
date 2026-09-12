@@ -1,6 +1,7 @@
 'use client';
 
 import { GithubSignInButton } from '@/features/auth/components/github-sign-in-button';
+import { SigninProductArt } from '@/features/auth/components/signin-product-art';
 
 const ERROR_MESSAGES: Record<string, string> = {
   OAuthAccountNotLinked:
@@ -24,103 +25,120 @@ export function SignInView({ error, callbackUrl = '/' }: SignInViewProps) {
     : null;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[var(--bg)] px-4">
-      {}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none fixed inset-0 opacity-[0.025]"
-        style={{
-          backgroundImage:
-            'repeating-linear-gradient(0deg, var(--border) 0, var(--border) 1px, transparent 1px, transparent 60px), repeating-linear-gradient(90deg, var(--border) 0, var(--border) 1px, transparent 1px, transparent 60px)',
-        }}
-      />
+    <div className="signin-page h-screen" style={{ fontFamily: 'var(--font-sans)', color: 'var(--brand-ink)' }}>
+      <main aria-label="Sign in to CodeSentinel" className="signin-shell">
+        {/* LEFT PANEL */}
+        <section className="signin-panel signin-panel--left">
+          <a className="inline-flex items-center gap-[10px] text-[#162244] text-[20px] font-bold no-underline max-[520px]:text-[17px]" href="#">
+            <div className="w-[39px] h-[39px] text-[#145c40] flex shrink-0" aria-hidden="true">
+              <svg viewBox="0 0 44 44" className="w-full h-full">
+                <path
+                  d="M16 5 6 15l5 5m17-15 10 10-5 5M11 27l-5 5 10 10m17-15 5 5-10 10M26 9l-8 26"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="4.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </div>
+            <span>CodeSentinel</span>
+          </a>
 
-      <main
-        aria-label="Sign in to CodeSentinel"
-        className="relative z-10 w-full max-w-[400px]"
-      >
-        {}
-        <div className="bg-[var(--card)] border border-[var(--border)] rounded-[16px] shadow-2xl px-8 py-10 flex flex-col gap-8">
+          <div className="signin-center">
+            <h1 className="signin-title">Welcome back</h1>
 
-          {}
-          <header className="flex flex-col items-center gap-3 text-center">
-            <div className="flex items-center gap-3">
-              <span className="font-hd font-black text-[28px] text-[var(--text)] tracking-[-0.02em]">
-                CS
-              </span>
-              <span
-                className="bg-[var(--accent)] text-white font-code text-[9px] font-semibold
-                           px-[8px] py-[3px] rounded-[4px] tracking-[0.1em] uppercase"
+            <p className="signin-subtitle">
+              Sign in with your GitHub account to continue
+            </p>
+
+            {errorMessage && (
+              <div
+                role="alert"
+                aria-live="polite"
+                className="mb-[24px] flex items-start gap-[9px] bg-[#fff0ed] border border-solid border-[#c8440a]/70 text-[#a3350a] rounded-[14px] px-[16px] py-[12px]"
               >
-                Sentinel
-              </span>
-            </div>
+                <span aria-hidden="true" className="text-[14px] shrink-0 leading-none">⚠</span>
+                <p className="m-0 text-[13px] leading-snug">{errorMessage}</p>
+              </div>
+            )}
 
-            <div className="flex flex-col gap-1">
-              <h1 className="font-hd font-bold text-[20px] text-[var(--text)] leading-snug">
-                Welcome back
-              </h1>
-              <p className="font-body text-[13px] text-[var(--muted)] leading-relaxed">
-                Sign in to continue to your repository intelligence workspace.
-              </p>
-            </div>
-          </header>
-
-          {}
-          {errorMessage && (
-            <div
-              role="alert"
-              aria-live="polite"
-              className="flex items-start gap-3 bg-[#fff0ed] border border-[var(--danger)] text-[var(--danger)]
-                         rounded-[8px] px-4 py-3"
-            >
-              <span aria-hidden="true" className="mt-0.5 text-[14px] shrink-0">⚠</span>
-              <p className="font-code text-[11px] leading-relaxed">{errorMessage}</p>
-            </div>
-          )}
-
-          {}
-          <div className="flex flex-col gap-4">
             <GithubSignInButton callbackUrl={callbackUrl} />
 
-            <p className="text-center font-code text-[10px] text-[var(--muted)] leading-relaxed px-2">
-              By signing in you agree to our{' '}
-              <span className="text-[var(--accent)] cursor-default">Terms of Service</span>
-              {' '}and{' '}
-              <span className="text-[var(--accent)] cursor-default">Privacy Policy</span>.
-            </p>
-          </div>
+            <div className="signin-note">
+              <svg className="w-[17px] h-[17px] mt-[2px] shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                <rect
+                  x="5"
+                  y="10"
+                  width="14"
+                  height="10"
+                  rx="2"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                />
+                <path
+                  d="M8.5 10V7.5a3.5 3.5 0 1 1 7 0V10"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                />
+              </svg>
 
-          {}
-          <div className="flex items-center gap-3" aria-hidden="true">
-            <div className="flex-1 h-px bg-[var(--border)]" />
-            <span className="font-code text-[10px] text-[var(--muted)] tracking-widest uppercase">
-              Secure
+              <p className="m-0 text-center text-[13px]" style={{ lineHeight: 1.55 }}>
+                We only request the permissions needed<br />
+                to access your repositories.
+              </p>
+            </div>
+
+            <div className="signin-learn">
+              <span>New to CodeSentinel?</span>
+              <a className="text-[#175c42] underline" style={{ textUnderlineOffset: '3px' }} href="#">
+                Learn more
+              </a>
+            </div>
+          </div>
+        </section>
+
+        {/* RIGHT PANEL */}
+        <section className="signin-panel signin-panel--right">
+          <blockquote className="signin-testimonial">
+            <span aria-hidden="true" className="signin-quote signin-quote--start">
+              “
             </span>
-            <div className="flex-1 h-px bg-[var(--border)]" />
-          </div>
 
-          {}
-          <footer className="flex justify-center gap-6">
-            {[
-              { icon: '🔒', label: 'OAuth 2.0 + PKCE' },
-              { icon: '🍪', label: 'httpOnly cookies' },
-              { icon: '🔄', label: 'Auto token refresh' },
-            ].map(({ icon, label }) => (
-              <div key={label} className="flex flex-col items-center gap-1">
-                <span className="text-[16px]" aria-hidden="true">{icon}</span>
-                <span className="font-code text-[9px] text-[var(--muted)] text-center leading-tight">
-                  {label}
-                </span>
+            <h2 className="signin-h2">
+              Understand any codebase faster<br />
+              with AI-powered insights, interactive<br />
+              diagrams, and always up-to-date<br />
+              documentation.
+            </h2>
+
+            <span aria-hidden="true" className="signin-quote signin-quote--end">
+              ”
+            </span>
+
+            <footer className="signin-author">
+              <div
+                className="w-[46px] h-[46px] shrink-0 rounded-full grid place-items-center text-white text-[10px] font-bold border-2 border-solid border-[#eee]"
+                style={{ background: 'linear-gradient(145deg, #dcdedc 0%, #838985 47%, #253530 48%, #17231f 100%)' }}
+                aria-hidden="true"
+              >
+                AM
               </div>
-            ))}
-          </footer>
-        </div>
 
-        {}
-        <p className="mt-4 text-center font-code text-[10px] text-[var(--muted)]">
-          CodeSentinel · Repository Intelligence Platform
-        </p>
+              <div className="flex flex-col leading-[1.4]">
+                <strong className="text-[14px]">Alex Mitchell</strong>
+                <span className="text-[#525550] text-[12px]">Software Engineer</span>
+                <small className="text-[#666964] text-[11px]">Amsterdam, NL</small>
+              </div>
+            </footer>
+          </blockquote>
+
+          <div className="signin-product-art">
+            <SigninProductArt />
+          </div>
+        </section>
       </main>
     </div>
   );
