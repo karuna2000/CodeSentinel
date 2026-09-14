@@ -1,4 +1,4 @@
-import { pipeline, env, type FeatureExtractionPipeline } from '@xenova/transformers';
+import { pipeline, env, type FeatureExtractionPipeline } from '@huggingface/transformers';
 
 // Configure Transformers.js to not use local models since Next.js build environment can be tricky with it.
 // It will download the models to a cache directory on first run.
