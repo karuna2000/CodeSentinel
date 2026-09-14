@@ -2,7 +2,7 @@ import { db } from '@/lib/db';
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
 
-export type LlmFeature = 'reasoning' | 'chat' | 'intent-detect' | 'wiki';
+export type LlmFeature = 'reasoning' | 'chat' | 'intent-detect' | 'wiki' | 'guardrail-judge';
 
 export interface LlmUsageMeta {
   userId: string;

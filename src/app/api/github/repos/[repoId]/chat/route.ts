@@ -7,6 +7,8 @@ import { classifyIntent } from '@/features/chat/agent/classify-intent';
 import { buildInvestigationPlan } from '@/features/chat/agent/build-investigation-plan';
 import { buildChatSystemPrompt } from '@/features/chat/agent/prompts';
 import type { AnswerStatus, ChatIntent } from '@/features/chat/agent/types';
+import { BLOCKED_FALLBACK, runGuardrails } from '@/features/chat/services/guardrails';
+import { judgeGroundedness } from '@/features/chat/services/groundedness-judge';
 import { withResilience } from '@/lib/llm/resilience';
 import { checkUsageBudget, trackStreamUsage, buildUsageExceededResponse } from '@/lib/llm/metering';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -14,6 +16,7 @@ import { buildRateLimitedResponse } from '@/lib/security';
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
+import { traceEvent } from '@/lib/observability';
 import { INPUT_LIMITS } from '@/config/app.config';
 
 export const maxDuration = 60;
@@ -203,26 +206,23 @@ export async function POST(
 
     trackStreamUsage(result.usage, { userId, repoId, feature: 'chat' });
 
-    // ── 6. Wrap stream so lazy provider failures surface mid-stream (never a
-    //        silent truncated 200). Sentinel stripped by the client. ──
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      async start(controller) {
-        try {
-          for await (const chunk of result.textStream) {
-            controller.enqueue(encoder.encode(chunk));
-          }
-        } catch (err) {
-          console.error('[Chat] stream error:', err);
-          controller.enqueue(encoder.encode(`\n\n[__STREAM_ERROR__]There was a problem finishing the answer. Please try again.`));
-        } finally {
-          controller.close();
-        }
-      },
-      cancel() {
-        // Provider stream pulled to completion already; nothing to abort.
-      },
+    // ── 6. Buffer-then-gate: collect the full answer, run the pure
+    //        guardrails BEFORE any byte is sent, then stream the verdict.
+    //        Buffering trades time-to-first-byte for blocking semantics —
+    //        fail-closed output with an unchanged client contract (stream +
+    //        sentinel + x-chat-meta). The slow model judge runs post-hoc
+    //        (observability only, never blocking). ──
+    const answer = await result.text;
+    const verdict = runGuardrails(answer, {
+      validTagIds: citations.map((c) => c.id),
+      evidenceCount,
     });
+    const servedText = verdict.blocked ? BLOCKED_FALLBACK : answer;
+    const gates = verdict.results.map((r) => ({
+      gate: r.gate,
+      pass: r.pass,
+      detail: r.detail,
+    }));
 
     logger.info('[Chat]', 'answered', {
       userId,
@@ -231,7 +231,76 @@ export async function POST(
       status,
       evidenceCount,
       stats: rawContext.stats,
+      blocked: verdict.blocked,
+      gates,
       retrievalMs: Math.round(performance.now() - startedAt),
+    });
+    traceEvent('chat_gated', {
+      userId,
+      repoId,
+      intent: classified.intent,
+      status,
+      blocked: verdict.blocked,
+      gates,
+    });
+
+    // Post-hoc, fire-and-forget: judge groundedness + persist the exchange.
+    // Persistence must never fail the request.
+    void (async () => {
+      try {
+        const judged = verdict.blocked
+          ? { pass: true, reason: 'blocked-no-judge', judged: false }
+          : await judgeGroundedness(answer, contextString, { userId, repoId });
+        traceEvent('chat_judged', {
+          userId,
+          repoId,
+          pass: judged.pass,
+          reason: judged.reason,
+          judged: judged.judged,
+        });
+        await db.chatHistory.create({
+          data: {
+            user_id: userId,
+            repo_id: repoId,
+            query,
+            answer: servedText,
+            intent: classified.intent,
+            status,
+            evidence: citations,
+            evals: {
+              gates,
+              judge: { pass: judged.pass, reason: judged.reason, judged: judged.judged },
+              blocked: verdict.blocked,
+            },
+            blocked: verdict.blocked,
+            latency_ms: Math.round(performance.now() - startedAt),
+          },
+        });
+      } catch (err) {
+        logger.error('[Chat]', 'Post-answer eval persistence failed', {
+          error: err instanceof Error ? err.message : String(err),
+          repoId,
+        });
+      }
+    })();
+
+    // Buffered text can't fail mid-stream server-side, but keep the sentinel
+    // wrapper so the client contract is unchanged.
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        try {
+          controller.enqueue(encoder.encode(servedText));
+        } catch (err) {
+          console.error('[Chat] stream error:', err);
+          controller.enqueue(encoder.encode(`\n\n[__STREAM_ERROR__]There was a problem finishing the answer. Please try again.`));
+        } finally {
+          controller.close();
+        }
+      },
+      cancel() {
+        // Buffered payload already produced; nothing to abort.
+      },
     });
 
     return new Response(stream, {
@@ -244,6 +313,8 @@ export async function POST(
             evidence: citations,
             followUps,
             stats: rawContext.stats ?? { lexicalHits: 0, semanticHits: 0, graphExpanded: 0 },
+            blocked: verdict.blocked,
+            gates,
           })
         ).toString('base64'),
       },

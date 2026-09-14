@@ -236,3 +236,25 @@ model LlmUsage {
   @@index([user_id, created_at])
   @@map("llm_usage")
 }
+
+// ── Chat History + Guardrail Evals (Phase A) ────────────────────────────────
+// Fire-and-forget writes: persistence must never fail a chat request.
+// No FK to Repository — history survives repo removal (like llm_usage).
+
+model ChatHistory {
+  id         String   @id @default(uuid())
+  user_id    String
+  repo_id    String
+  query      String
+  answer     String
+  intent     String?
+  status     String?
+  evidence   Json?
+  evals      Json?
+  blocked    Boolean  @default(false)
+  latency_ms Int?
+  created_at DateTime @default(now())
+
+  @@index([user_id, repo_id, created_at])
+  @@map("chat_history")
+}
