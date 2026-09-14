@@ -107,8 +107,8 @@ export async function retrieveContext(
         OR to_tsvector('simple', coalesce(signature, '')) @@ websearch_to_tsquery('simple', ${termQuery})
         OR to_tsvector('english', coalesce(documentation, '')) @@ websearch_to_tsquery('simple', ${termQuery})
         OR to_tsvector('simple', coalesce(code_snippet, '')) @@ websearch_to_tsquery('simple', ${termQuery})
-        OR lower(name) LIKE ANY (${likePatterns}) ESCAPE chr(92)
-        OR lower(signature) LIKE ANY (${likePatterns}) ESCAPE chr(92)
+        OR lower(name) LIKE ANY (${likePatterns})
+        OR lower(signature) LIKE ANY (${likePatterns})
       )
       ORDER BY rank DESC NULLS LAST
       LIMIT ${MAX_KEYWORD}
