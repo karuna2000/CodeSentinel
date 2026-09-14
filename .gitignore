@@ -22,3 +22,4 @@ architecture_flow.md
 *.pem
 *.key
 docker/langfuse/
+docker/signoz/pours/
