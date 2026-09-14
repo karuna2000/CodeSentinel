@@ -6,7 +6,7 @@ import {
 } from '@/features/context-engine/services/budget-manager';
 import { classifyIntent } from '@/features/chat/agent/classify-intent';
 import { buildInvestigationPlan } from '@/features/chat/agent/build-investigation-plan';
-import { buildChatSystemPrompt } from '@/features/chat/agent/prompts';
+import { buildChatSystemPrompt, CHAT_PROMPT_VERSION } from '@/features/chat/agent/prompts';
 import type { AnswerStatus, ChatIntent } from '@/features/chat/agent/types';
 import { BLOCKED_FALLBACK, runGuardrails } from '@/features/chat/services/guardrails';
 import { judgeGroundedness } from '@/features/chat/services/groundedness-judge';
@@ -149,6 +149,11 @@ export async function answerQuestion(opts: AnswerOptions): Promise<AnswerResult>
   const { repoId, commitSha, actorId, query, history, useCache, persist } = opts;
   const startedAt = performance.now();
 
+  // Root span: children (classify/retrieve/generate/gates/judge) correlate
+  // automatically via context propagation (spec §9).
+  return withSpan('chat.answer', { repoId, queryChars: query.length }, async (rootSpan) => {
+    const otelTraceId = rootSpan.spanContext().traceId;
+
   // ── 0. Answer cache — commit_sha-scoped key. Hits skip the LLM entirely. ──
   const cacheKey = buildCacheKey(repoId, commitSha, query);
   const cacheClient = useCache ? await getCacheClient() : null;
@@ -238,12 +243,13 @@ export async function answerQuestion(opts: AnswerOptions): Promise<AnswerResult>
     .filter((m) => m.content.trim().length > 0)
     .slice(-INPUT_LIMITS.chatHistoryMaxTurns);
 
-  // ── 5. Generate — same fallback/backoff policy as review & wiki engines ──
-  const result = await withSpan(
+  // ── 5. Generate — span covers stream CONSUMPTION (call setup is instant
+  //        in SDK v6; generation latency lives in the awaited text). ──
+  const { result, answer } = await withSpan(
     'chat.generate',
-    { intent: classified.intent, status, evidenceCount },
-    async () =>
-      withResilience(
+    { intent: classified.intent, status, evidenceCount, promptVersion: CHAT_PROMPT_VERSION },
+    async (span) => {
+      const r = await withResilience(
         (model) =>
           streamText({
             model,
@@ -265,13 +271,19 @@ export async function answerQuestion(opts: AnswerOptions): Promise<AnswerResult>
             },
           }),
         'chat',
-      ),
+      );
+      const text = await r.text;
+      const usage = await r.usage;
+      span.setAttributes({
+        'llm.inputTokens': usage.inputTokens ?? 0,
+        'llm.outputTokens': usage.outputTokens ?? 0,
+        'llm.answerChars': text.length,
+      });
+      return { result: r, answer: text };
+    },
   );
 
   trackStreamUsage(result.usage, { userId: actorId, repoId, feature: 'chat' });
-
-  // ── 6. Buffer-then-gate: guardrails run BEFORE anything is served. ──
-  const answer = await result.text;
   const verdict = await withSpan(
     'chat.gates',
     { intent: classified.intent, evidenceCount, answerChars: answer.length },
@@ -324,6 +336,8 @@ export async function answerQuestion(opts: AnswerOptions): Promise<AnswerResult>
     intent: classified.intent,
     status,
     evidenceCount,
+    promptVersion: CHAT_PROMPT_VERSION,
+    otelTraceId,
     stats: rawContext.stats,
     blocked: verdict.blocked,
     gates,
@@ -345,6 +359,7 @@ export async function answerQuestion(opts: AnswerOptions): Promise<AnswerResult>
     status,
     blocked: verdict.blocked,
     gates,
+    otel_trace_id: otelTraceId,
   });
 
   // Post-hoc, fire-and-forget: judge groundedness + persist the exchange.
@@ -353,9 +368,13 @@ export async function answerQuestion(opts: AnswerOptions): Promise<AnswerResult>
       try {
         const judged = verdict.blocked
           ? { pass: true, reason: 'blocked-no-judge', judged: false }
-          : await withSpan('chat.judge', { intent: classified.intent }, async () =>
-              judgeGroundedness(answer, contextString, { userId: actorId, repoId }),
-            );
+          : await withSpan('chat.judge', { intent: classified.intent }, async (span) => {
+              const v = await judgeGroundedness(answer, contextString, { userId: actorId, repoId });
+              // Judge verdict as span attrs: the Langfuse-visible evaluation
+              // record (spec §18), alongside the Prometheus counter + Postgres.
+              span.setAttributes({ 'judge.pass': v.pass, 'judge.reason': v.reason, 'judge.ran': v.judged });
+              return v;
+            });
         judgeVerdictsTotal.inc({ pass: String(judged.pass) });
         traceEvent('chat_judged', {
           userId: actorId,
@@ -403,4 +422,5 @@ export async function answerQuestion(opts: AnswerOptions): Promise<AnswerResult>
       gates,
     },
   };
+  });
 }

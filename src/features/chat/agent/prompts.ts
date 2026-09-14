@@ -1,5 +1,12 @@
 import type { ChatIntent } from './types';
 
+/**
+ * Version of the chat system-prompt template (spec §16). Bump on any template
+ * change and record the new value on spans/logs so prompt regressions can be
+ * attributed. Prompt TEXT is unchanged by versioning alone.
+ */
+export const CHAT_PROMPT_VERSION = 'v1';
+
 const INTENT_LABELS: Record<ChatIntent, string> = {
   locate: 'Find the exact location of a symbol/function/module in the code',
   explain: 'Explain how a specific symbol or piece of the code works',

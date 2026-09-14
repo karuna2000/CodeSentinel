@@ -144,6 +144,14 @@ Optional local services (all disabled when unset):
 - `REDIS_URL` (e.g. `redis://localhost:6379` via `docker run -d -p 6379:6379 redis:8-alpine`) — enables the chat answer cache. Rate limiting is a separate Upstash REST client and is unaffected.
 - `DEMO_REPO_IDS` (comma-separated repository ids) — enables anonymous grounded Q&A at `/demo`, scoped strictly to those ids.
 
+## Observability (optional, all best-effort)
+
+- **Logs:** pretty text in dev, JSON in production; `[Chat]` entries carry `otelTraceId` for correlation.
+- **Metrics:** Prometheus endpoint at `/api/metrics` (aggregate labels only — no users, repos, or queries).
+- **Traces:** OpenTelemetry spans (`chat.answer` → classify/retrieve/generate/gates/judge) export to self-hosted Langfuse when `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY`/`LANGFUSE_HOST` are set, or to any collector via `OTEL_EXPORTER_OTLP_ENDPOINT`. Without either, spans are dropped and the app is unaffected.
+- **Self-hosted Langfuse:** `docker/langfuse` (official compose, UI at http://localhost:3010). See `docker-compose.yml` comments. Telemetry is scrubbed before export (`src/lib/observability-sanitize.ts`); set `OBS_CAPTURE_CONTENT=true` explicitly to include raw content (dev only, never production).
+- **Dashboard:** `/admin/observability` (signed-in, scoped to your account) reads the local `trace_events`/`chat_history`/`llm_usage` tables.
+
 ---
 
 ## 📄 License

@@ -21,3 +21,4 @@ architecture_flow.md
 # Secrets & signing keys
 *.pem
 *.key
+docker/langfuse/
