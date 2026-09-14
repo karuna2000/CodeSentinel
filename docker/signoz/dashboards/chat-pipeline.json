@@ -1,20 +1,54 @@
 {
-  "tags": [{ "key": "domain", "value": "codesintler" }],
+  "tags": [
+    {
+      "key": "domain",
+      "value": "codesintler"
+    }
+  ],
   "spec": {
     "display": {
-      "name": "CodeSentinel — Chat Pipeline",
-      "description": "Request rate, stage latency, and guardrail blocks for the grounded Q&A pipeline. Import via SigNoz UI (Dashboards → Import JSON)."
+      "name": "CodeSentinel \u2014 Chat Pipeline",
+      "description": "Request rate, stage latency, and guardrail blocks for the grounded Q&A pipeline. Import via SigNoz UI (Dashboards \u2192 Import JSON)."
     },
     "variables": [],
     "layouts": [
       {
         "kind": "Grid",
         "spec": {
-          "display": { "title": "Overview", "collapse": { "open": true } },
+          "display": {
+            "title": "Overview",
+            "collapse": {
+              "open": true
+            }
+          },
           "items": [
-            { "x": 0, "y": 0, "width": 6, "height": 6, "content": { "$ref": "#/spec/panels/chat-answer-rate" } },
-            { "x": 6, "y": 0, "width": 6, "height": 6, "content": { "$ref": "#/spec/panels/chat-stage-latency" } },
-            { "x": 0, "y": 6, "width": 12, "height": 6, "content": { "$ref": "#/spec/panels/guardrail-blocks" } }
+            {
+              "x": 0,
+              "y": 0,
+              "width": 6,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/chat-answer-rate"
+              }
+            },
+            {
+              "x": 6,
+              "y": 0,
+              "width": 6,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/chat-stage-latency"
+              }
+            },
+            {
+              "x": 0,
+              "y": 6,
+              "width": 12,
+              "height": 6,
+              "content": {
+                "$ref": "#/spec/panels/guardrail-blocks"
+              }
+            }
           ]
         }
       }
@@ -23,12 +57,18 @@
       "chat-answer-rate": {
         "kind": "Panel",
         "spec": {
-          "display": { "name": "Chat answers by status" },
+          "display": {
+            "name": "Chat answers by status"
+          },
           "plugin": {
             "kind": "signoz/TimeSeriesPanel",
             "spec": {
-              "visualization": { "timePreference": "global_time" },
-              "legend": { "position": "bottom" }
+              "visualization": {
+                "timePreference": "global_time"
+              },
+              "legend": {
+                "position": "bottom"
+              }
             }
           },
           "queries": [
@@ -44,11 +84,22 @@
                         "spec": {
                           "name": "A",
                           "signal": "traces",
-                          "aggregations": [{ "expression": "count()" }],
-                          "filter": { "expression": "name = 'chat.answer'" },
-                          "groupBy": [{ "name": "status.string" }],
-                          "having": { "expression": "" },
-                          "order": [{ "columnName": "count()", "order": "desc" }]
+                          "aggregations": [
+                            {
+                              "expression": "count()"
+                            }
+                          ],
+                          "filter": {
+                            "expression": "name = 'chat.answer'"
+                          },
+                          "groupBy": [
+                            {
+                              "name": "status.string"
+                            }
+                          ],
+                          "having": {
+                            "expression": ""
+                          }
                         }
                       }
                     ]
@@ -62,13 +113,21 @@
       "chat-stage-latency": {
         "kind": "Panel",
         "spec": {
-          "display": { "name": "Stage latency p95 (classify/retrieve/generate/gates/judge)" },
+          "display": {
+            "name": "Stage latency p95 (classify/retrieve/generate/gates/judge)"
+          },
           "plugin": {
             "kind": "signoz/TimeSeriesPanel",
             "spec": {
-              "visualization": { "timePreference": "global_time" },
-              "legend": { "position": "bottom" },
-              "formatting": { "unit": "ms" }
+              "visualization": {
+                "timePreference": "global_time"
+              },
+              "legend": {
+                "position": "bottom"
+              },
+              "formatting": {
+                "unit": "ms"
+              }
             }
           },
           "queries": [
@@ -84,11 +143,22 @@
                         "spec": {
                           "name": "A",
                           "signal": "traces",
-                          "aggregations": [{ "expression": "p95(durationNano)/1000000" }],
-                          "filter": { "expression": "name IN ('chat.classify','chat.retrieve','chat.generate','chat.gates','chat.judge')" },
-                          "groupBy": [{ "name": "name" }],
-                          "having": { "expression": "" },
-                          "order": [{ "columnName": "p95(durationNano)/1000000", "order": "desc" }]
+                          "aggregations": [
+                            {
+                              "expression": "p95(durationNano)/1000000"
+                            }
+                          ],
+                          "filter": {
+                            "expression": "name IN ('chat.classify','chat.retrieve','chat.generate','chat.gates','chat.judge')"
+                          },
+                          "groupBy": [
+                            {
+                              "name": "name"
+                            }
+                          ],
+                          "having": {
+                            "expression": ""
+                          }
                         }
                       }
                     ]
@@ -102,12 +172,18 @@
       "guardrail-blocks": {
         "kind": "Panel",
         "spec": {
-          "display": { "name": "Guardrail blocks (failed gates)" },
+          "display": {
+            "name": "Guardrail blocks (failed gates)"
+          },
           "plugin": {
             "kind": "signoz/TimeSeriesPanel",
             "spec": {
-              "visualization": { "timePreference": "global_time" },
-              "legend": { "position": "bottom" }
+              "visualization": {
+                "timePreference": "global_time"
+              },
+              "legend": {
+                "position": "bottom"
+              }
             }
           },
           "queries": [
@@ -123,11 +199,18 @@
                         "spec": {
                           "name": "A",
                           "signal": "traces",
-                          "aggregations": [{ "expression": "count()" }],
-                          "filter": { "expression": "name = 'chat.gates'" },
+                          "aggregations": [
+                            {
+                              "expression": "count()"
+                            }
+                          ],
+                          "filter": {
+                            "expression": "name = 'chat.gates'"
+                          },
                           "groupBy": [],
-                          "having": { "expression": "" },
-                          "order": [{ "columnName": "count()", "order": "desc" }]
+                          "having": {
+                            "expression": ""
+                          }
                         }
                       }
                     ]
