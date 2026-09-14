@@ -9,6 +9,13 @@ import { buildChatSystemPrompt } from '@/features/chat/agent/prompts';
 import type { AnswerStatus, ChatIntent } from '@/features/chat/agent/types';
 import { BLOCKED_FALLBACK, runGuardrails } from '@/features/chat/services/guardrails';
 import { judgeGroundedness } from '@/features/chat/services/groundedness-judge';
+import {
+  buildCacheKey,
+  getCacheClient,
+  getCachedAnswer,
+  setCachedAnswer,
+  type CachedAnswer,
+} from '@/lib/cache/chat-cache';
 import { withResilience } from '@/lib/llm/resilience';
 import { checkUsageBudget, trackStreamUsage, buildUsageExceededResponse } from '@/lib/llm/metering';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -68,6 +75,43 @@ function computeStatus(evidenceCount: number): AnswerStatus {
   return 'grounded';
 }
 
+interface ChatResponseMeta {
+  intent: ChatIntent;
+  status: AnswerStatus;
+  evidence: unknown;
+  followUps: string[];
+  stats: unknown;
+  blocked: boolean;
+  gates: Array<{ gate: string; pass: boolean; detail: string }>;
+}
+
+/** Single response shape for fresh, cached, and blocked answers alike. */
+function buildChatResponse(text: string, meta: ChatResponseMeta): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    start(controller) {
+      try {
+        controller.enqueue(encoder.encode(text));
+      } catch (err) {
+        console.error('[Chat] stream error:', err);
+        controller.enqueue(encoder.encode(`\n\n[__STREAM_ERROR__]There was a problem finishing the answer. Please try again.`));
+      } finally {
+        controller.close();
+      }
+    },
+    cancel() {
+      // Buffered payload already produced; nothing to abort.
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'x-chat-meta': Buffer.from(JSON.stringify(meta)).toString('base64'),
+    },
+  });
+}
+
 export async function POST(
   request: Request,
   props: { params: Promise<{ repoId: string }> }
@@ -99,7 +143,7 @@ export async function POST(
   // Verify repo belongs to this user
   const repo = await db.repository.findFirst({
     where: { id: repoId, user_id: userId },
-    select: { id: true },
+    select: { id: true, commit_sha: true },
   });
   if (!repo) {
     return NextResponse.json({ error: 'Repository not found' }, { status: 404 });
@@ -129,6 +173,32 @@ export async function POST(
         { error: `Message too long. Maximum is ${INPUT_LIMITS.chatMessageMaxChars} characters.` },
         { status: 400 }
       );
+    }
+
+    // ── 0. Answer cache — commit_sha-scoped key: identical questions served
+    //        without spending tokens; re-indexes auto-invalidate. Hits skip
+    //        the LLM entirely (no usage recorded — that IS the savings) and
+    //        are traced for hit-rate observability. ──
+    const cacheKey = buildCacheKey(repoId, repo.commit_sha, query);
+    const cacheClient = await getCacheClient();
+    const cached = await getCachedAnswer(cacheKey, cacheClient);
+    if (cached) {
+      traceEvent('chat_cache_hit', { userId, repoId, intent: cached.intent });
+      logger.info('[Chat]', 'cache hit', {
+        userId,
+        repoId,
+        intent: cached.intent,
+        retrievalMs: Math.round(performance.now() - startedAt),
+      });
+      return buildChatResponse(cached.text, {
+        intent: cached.intent as ChatIntent,
+        status: cached.status as AnswerStatus,
+        evidence: cached.evidence,
+        followUps: cached.followUps,
+        stats: cached.stats,
+        blocked: false,
+        gates: cached.gates,
+      });
     }
 
     // ── 1. Classify intent (deterministic hints + model fallback, safe default) ──
@@ -224,6 +294,35 @@ export async function POST(
       detail: r.detail,
     }));
 
+    // Store cacheable answers: served, grounded, and cited. Blocked or thin
+    // answers are never cached. Fire-and-forget — a Redis outage must not
+    // slow or fail the response already in hand.
+    if (!verdict.blocked && status === 'grounded') {
+      const entry: CachedAnswer = {
+        text: servedText,
+        intent: classified.intent,
+        status,
+        evidence: citations,
+        followUps,
+        stats: rawContext.stats ?? { lexicalHits: 0, semanticHits: 0, graphExpanded: 0 },
+        gates,
+      };
+      void setCachedAnswer(cacheKey, entry, cacheClient).then((stored) => {
+        traceEvent(stored ? 'chat_cache_store' : 'chat_cache_store_failed', {
+          userId,
+          repoId,
+          intent: classified.intent,
+        });
+      });
+    } else {
+      traceEvent('chat_cache_skip', {
+        userId,
+        repoId,
+        intent: classified.intent,
+        reason: verdict.blocked ? 'blocked' : status,
+      });
+    }
+
     logger.info('[Chat]', 'answered', {
       userId,
       repoId,
@@ -286,38 +385,14 @@ export async function POST(
 
     // Buffered text can't fail mid-stream server-side, but keep the sentinel
     // wrapper so the client contract is unchanged.
-    const encoder = new TextEncoder();
-    const stream = new ReadableStream({
-      start(controller) {
-        try {
-          controller.enqueue(encoder.encode(servedText));
-        } catch (err) {
-          console.error('[Chat] stream error:', err);
-          controller.enqueue(encoder.encode(`\n\n[__STREAM_ERROR__]There was a problem finishing the answer. Please try again.`));
-        } finally {
-          controller.close();
-        }
-      },
-      cancel() {
-        // Buffered payload already produced; nothing to abort.
-      },
-    });
-
-    return new Response(stream, {
-      headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
-        'x-chat-meta': Buffer.from(
-          JSON.stringify({
-            intent: classified.intent,
-            status,
-            evidence: citations,
-            followUps,
-            stats: rawContext.stats ?? { lexicalHits: 0, semanticHits: 0, graphExpanded: 0 },
-            blocked: verdict.blocked,
-            gates,
-          })
-        ).toString('base64'),
-      },
+    return buildChatResponse(servedText, {
+      intent: classified.intent,
+      status,
+      evidence: citations,
+      followUps,
+      stats: rawContext.stats ?? { lexicalHits: 0, semanticHits: 0, graphExpanded: 0 },
+      blocked: verdict.blocked,
+      gates,
     });
   } catch (error) {
     logger.error('[Chat]', 'Chat request failed', { error: error instanceof Error ? error.message : String(error), repoId });
