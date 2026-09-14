@@ -17,6 +17,7 @@ export async function createTelemetrySDK(config = observabilityConfig()) {
     })));
   }
   let metricReader;
+  let logRecordProcessor;
   if (config.traceEndpoint) {
     const { OTLPTraceExporter } = await import('@opentelemetry/exporter-trace-otlp-http');
     processors.push(new SanitizingSpanProcessor(new BatchSpanProcessor({
@@ -33,12 +34,22 @@ export async function createTelemetrySDK(config = observabilityConfig()) {
       }),
       exportIntervalMillis: 30_000,
     });
+    // Logs ride the same collector. Best-effort mirror only — Postgres and
+    // stdout stay the durable copies (OTel JS logs are still maturing).
+    const { OTLPLogExporter } = await import('@opentelemetry/exporter-logs-otlp-http');
+    const { BatchLogRecordProcessor } = await import('@opentelemetry/sdk-logs');
+    logRecordProcessor = new BatchLogRecordProcessor({
+      exporter: new OTLPLogExporter({
+        url: config.traceEndpoint.replace(/\/v1\/traces$/, '/v1/logs'),
+        timeoutMillis: 2000,
+      }),
+    });
   }
   return new NodeSDK({
     serviceName: config.serviceName,
     // Explicit empty lists prevent ambient SDK defaults from creating unsanitized sinks.
     spanProcessors: processors,
-    logRecordProcessors: [],
+    logRecordProcessors: logRecordProcessor ? [logRecordProcessor] : [],
     metricReaders: metricReader ? [metricReader] : [],
     autoDetectResources: false,
   });
