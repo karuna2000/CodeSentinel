@@ -1,6 +1,13 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { retrieveContext } from '@/features/context-engine/services/hybrid-retriever';
 import { formatContextString } from '@/features/context-engine/services/budget-manager';
+import {
+  DEFAULT_K,
+  formatScoreTable,
+  scoreCase,
+  summarizeRun,
+  type CaseScore,
+} from '@/features/context-engine/services/retrieval-metrics';
 import { db } from '@/lib/db';
 
 /**
@@ -51,6 +58,16 @@ const INTENT_CASES: IntentCase[] = [
     query: 'streaming response handling',
     searchTerms: ['stream', 'model', 'llm'],
   },
+  {
+    name: 'impact of changing auth',
+    query: 'what could break if I change the session handling',
+    searchTerms: ['session', 'auth', 'change'],
+  },
+  {
+    name: 'callers and dependencies',
+    query: 'what calls the rate limiter',
+    searchTerms: ['rate', 'limit', 'calls'],
+  },
 ];
 
 function nameMatchesAny(name: string, terms: string[]): boolean {
@@ -60,6 +77,8 @@ function nameMatchesAny(name: string, terms: string[]): boolean {
 
 describe('Retrieval Eval — Recall', () => {
   let nodeNames: string[] = [];
+  const nodeIdsByName = new Map<string, string>();
+  const caseScores: CaseScore[] = [];
   // Always-on control: recall against the repo's own most common symbol token,
   // so a real recall assertion is exercised on any fixture.
   let controlTerm = '';
@@ -73,10 +92,15 @@ describe('Retrieval Eval — Recall', () => {
       );
     }
 
-    const rows = await db.$queryRaw<Array<{ name: string }>>`
-      SELECT name FROM graph_nodes WHERE repo_id = ${EVAL_REPO_ID} AND name IS NOT NULL
+    const rows = await db.$queryRaw<Array<{ id: string; name: string }>>`
+      SELECT id, name FROM graph_nodes WHERE repo_id = ${EVAL_REPO_ID} AND name IS NOT NULL
     `;
     nodeNames = rows.map((r) => r.name).filter(Boolean);
+    for (const row of rows) {
+      if (row.name && !nodeIdsByName.has(row.name.toLowerCase())) {
+        nodeIdsByName.set(row.name.toLowerCase(), row.id);
+      }
+    }
 
     if (nodeNames.length === 0) {
       throw new Error(
@@ -118,6 +142,7 @@ describe('Retrieval Eval — Recall', () => {
       expect(context.nodes.length).toBeLessThanOrEqual(MAX_TOTAL_NODES);
 
       if (relevant.length === 0) {
+        caseScores.push(scoreCase(tc.name, [], new Set()));
         return ctx.skip(
           `repo has no symbols matching [${tc.searchTerms.join(', ')}]; recall not asserted`
         );
@@ -134,6 +159,27 @@ describe('Retrieval Eval — Recall', () => {
         `retrieved ${matched}/${relevant.length} expected nodes for "${tc.name}"\n` +
           `top results:\n${context.nodes.slice(0, 8).map((n) => `  - ${n.type}: ${n.name}`).join('\n')}`
       ).toBeGreaterThanOrEqual(Math.min(threshold, 1));
+
+      // Rank-aware scoring: relevant ids (by name match) against retrieval order.
+      const relevantIds = new Set<string>();
+      for (const name of relevant) {
+        const id = nodeIdsByName.get(name.toLowerCase());
+        if (id) relevantIds.add(id);
+      }
+      const rankedIds = context.nodes.map((n) => n.id);
+      const score = scoreCase(tc.name, rankedIds, relevantIds, DEFAULT_K);
+      caseScores.push(score);
+
+      // Hard rank floor only for tightly-scoped cases (few expected nodes):
+      // at least half must land in the top-k. Broad cases report without a
+      // floor — a 20-node list cannot cover 50 matches in its top 6.
+      if (relevant.length <= DEFAULT_K) {
+        expect(
+          score.recallAtK ?? 0,
+          `recall@${DEFAULT_K} too low for tightly-scoped case "${tc.name}" ` +
+            `(matched ${score.matched}/${relevant.length} in top ${DEFAULT_K})`,
+        ).toBeGreaterThanOrEqual(MIN_RECALL_FRACTION);
+      }
     });
   }
 
@@ -154,5 +200,16 @@ describe('Retrieval Eval — Recall', () => {
     const formatted = formatContextString(context);
     // Budget manager caps at ~12k tokens (~48k chars)
     expect(formatted.length).toBeLessThan(60_000);
+  });
+
+  afterAll(() => {
+    const summary = summarizeRun(caseScores);
+    const fmt = (v: number | null) => (v === null ? 'n/a' : v.toFixed(3));
+    console.log(
+      `\n[Retrieval Eval] scored ${summary.scored}/${summary.cases} cases ` +
+        `(${summary.skipped} skipped) | mean recall@${DEFAULT_K}=${fmt(summary.meanRecallAtK)} ` +
+        `| mean RR=${fmt(summary.meanReciprocalRank)} | mean NDCG@${DEFAULT_K}=${fmt(summary.meanNdcgAtK)}` +
+        formatScoreTable(caseScores),
+    );
   });
 });
