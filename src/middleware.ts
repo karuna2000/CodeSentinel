@@ -12,6 +12,8 @@ const PUBLIC_PATHS: string[] = [
   // Anonymous demo (allowlist-scoped at the route level — see DEMO_REPO_IDS).
   '/demo',
   '/api/demo',
+  // Prometheus scrape endpoint — aggregate labels only, no user/repo data.
+  '/api/metrics',
 ];
 
 const NEXTAUTH_PATHS = [

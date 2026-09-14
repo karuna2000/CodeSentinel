@@ -19,6 +19,14 @@ import {
 } from '@/lib/cache/chat-cache';
 import { withResilience } from '@/lib/llm/resilience';
 import { trackStreamUsage } from '@/lib/llm/metering';
+import {
+  cacheEventsTotal,
+  chatAnswersTotal,
+  chatLatencySeconds,
+  guardrailBlocksTotal,
+  judgeVerdictsTotal,
+} from '@/lib/metrics';
+import { withSpan } from '@/lib/tracing';
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { traceEvent } from '@/lib/observability';
@@ -147,6 +155,9 @@ export async function answerQuestion(opts: AnswerOptions): Promise<AnswerResult>
   const cached = await getCachedAnswer(cacheKey, cacheClient);
   if (cached) {
     traceEvent('chat_cache_hit', { userId: actorId, repoId, intent: cached.intent });
+    cacheEventsTotal.inc({ result: 'hit' });
+    chatAnswersTotal.inc({ intent: cached.intent, status: cached.status, blocked: 'false' });
+    chatLatencySeconds.observe((performance.now() - startedAt) / 1000);
     logger.info('[Chat]', 'cache hit', {
       userId: actorId,
       repoId,
@@ -168,16 +179,33 @@ export async function answerQuestion(opts: AnswerOptions): Promise<AnswerResult>
   }
 
   // ── 1. Classify intent (deterministic hints + model fallback, safe default) ──
-  const classified = await classifyIntent(query, actorId, repoId);
+  const classified = await withSpan(
+    'chat.classify',
+    { queryChars: query.length },
+    async () => classifyIntent(query, actorId, repoId),
+  );
   const plan = buildInvestigationPlan(classified.intent, classified.directionHint);
 
   // ── 2. Retrieval — plan-aware traversal (direction + relations + depth) ──
-  const rawContext = await retrieveContext(repoId, classified.searchTerms, query, {
-    direction: plan.graph.enabled ? plan.graph.direction : 'both',
-    maxHops: plan.graph.enabled ? plan.graph.maxHops : 0,
-    relations: plan.graph.enabled ? plan.graph.relations : null,
-    resultLimit: plan.resultLimit,
-  });
+  const rawContext = await withSpan(
+    'chat.retrieve',
+    { intent: classified.intent, direction: plan.graph.direction, maxHops: plan.graph.maxHops },
+    async (span) => {
+      const ctx = await retrieveContext(repoId, classified.searchTerms, query, {
+        direction: plan.graph.enabled ? plan.graph.direction : 'both',
+        maxHops: plan.graph.enabled ? plan.graph.maxHops : 0,
+        relations: plan.graph.enabled ? plan.graph.relations : null,
+        resultLimit: plan.resultLimit,
+      });
+      span.setAttributes({
+        'retrieval.nodes': ctx.nodes.length,
+        'retrieval.lexicalHits': ctx.stats?.lexicalHits ?? 0,
+        'retrieval.semanticHits': ctx.stats?.semanticHits ?? 0,
+        'retrieval.graphExpanded': ctx.stats?.graphExpanded ?? 0,
+      });
+      return ctx;
+    },
+  );
 
   // ── 3. Ground the answer: status + evidence index + prompt ──
   const evidenceCount = rawContext.nodes.length;
@@ -211,38 +239,48 @@ export async function answerQuestion(opts: AnswerOptions): Promise<AnswerResult>
     .slice(-INPUT_LIMITS.chatHistoryMaxTurns);
 
   // ── 5. Generate — same fallback/backoff policy as review & wiki engines ──
-  const result = await withResilience(
-    (model) =>
-      streamText({
-        model,
-        system: systemPrompt,
-        messages: formattedMessages,
-        temperature: 0.1,
-        experimental_telemetry: {
-          isEnabled: true,
-          metadata: {
-            userId: actorId,
-            repoId,
-            intent: classified.intent,
-            status,
-            nodesRetrieved: evidenceCount,
-            lexicalHits: rawContext.stats?.lexicalHits ?? 0,
-            semanticHits: rawContext.stats?.semanticHits ?? 0,
-            graphExpanded: rawContext.stats?.graphExpanded ?? 0,
-          },
-        },
-      }),
-    'chat',
+  const result = await withSpan(
+    'chat.generate',
+    { intent: classified.intent, status, evidenceCount },
+    async () =>
+      withResilience(
+        (model) =>
+          streamText({
+            model,
+            system: systemPrompt,
+            messages: formattedMessages,
+            temperature: 0.1,
+            experimental_telemetry: {
+              isEnabled: true,
+              metadata: {
+                userId: actorId,
+                repoId,
+                intent: classified.intent,
+                status,
+                nodesRetrieved: evidenceCount,
+                lexicalHits: rawContext.stats?.lexicalHits ?? 0,
+                semanticHits: rawContext.stats?.semanticHits ?? 0,
+                graphExpanded: rawContext.stats?.graphExpanded ?? 0,
+              },
+            },
+          }),
+        'chat',
+      ),
   );
 
   trackStreamUsage(result.usage, { userId: actorId, repoId, feature: 'chat' });
 
   // ── 6. Buffer-then-gate: guardrails run BEFORE anything is served. ──
   const answer = await result.text;
-  const verdict = runGuardrails(answer, {
-    validTagIds: citations.map((c) => c.id),
-    evidenceCount,
-  });
+  const verdict = await withSpan(
+    'chat.gates',
+    { intent: classified.intent, evidenceCount, answerChars: answer.length },
+    async () =>
+      runGuardrails(answer, {
+        validTagIds: citations.map((c) => c.id),
+        evidenceCount,
+      }),
+  );
   const servedText = verdict.blocked ? BLOCKED_FALLBACK : answer;
   const gates = verdict.results.map((r) => ({
     gate: r.gate,
@@ -262,6 +300,7 @@ export async function answerQuestion(opts: AnswerOptions): Promise<AnswerResult>
         gates,
       };
       void setCachedAnswer(cacheKey, entry, cacheClient).then((stored) => {
+        cacheEventsTotal.inc({ result: stored ? 'store' : 'store_failed' });
         traceEvent(stored ? 'chat_cache_store' : 'chat_cache_store_failed', {
           userId: actorId,
           repoId,
@@ -269,6 +308,7 @@ export async function answerQuestion(opts: AnswerOptions): Promise<AnswerResult>
         });
       });
     } else {
+      cacheEventsTotal.inc({ result: 'skip' });
       traceEvent('chat_cache_skip', {
         userId: actorId,
         repoId,
@@ -289,6 +329,15 @@ export async function answerQuestion(opts: AnswerOptions): Promise<AnswerResult>
     gates,
     retrievalMs: Math.round(performance.now() - startedAt),
   });
+  chatAnswersTotal.inc({
+    intent: classified.intent,
+    status,
+    blocked: String(verdict.blocked),
+  });
+  chatLatencySeconds.observe((performance.now() - startedAt) / 1000);
+  for (const g of verdict.results) {
+    if (!g.pass) guardrailBlocksTotal.inc({ gate: g.gate });
+  }
   traceEvent('chat_gated', {
     userId: actorId,
     repoId,
@@ -304,7 +353,10 @@ export async function answerQuestion(opts: AnswerOptions): Promise<AnswerResult>
       try {
         const judged = verdict.blocked
           ? { pass: true, reason: 'blocked-no-judge', judged: false }
-          : await judgeGroundedness(answer, contextString, { userId: actorId, repoId });
+          : await withSpan('chat.judge', { intent: classified.intent }, async () =>
+              judgeGroundedness(answer, contextString, { userId: actorId, repoId }),
+            );
+        judgeVerdictsTotal.inc({ pass: String(judged.pass) });
         traceEvent('chat_judged', {
           userId: actorId,
           repoId,
