@@ -104,7 +104,7 @@ ${answer}
     const message = error instanceof Error ? error.message : 'Unknown error';
     logger.error('[Wiki Promote]', 'Failed to promote to wiki', { error: message, repoId, userId });
     return NextResponse.json(
-      { error: 'Failed to promote to wiki', details: message },
+      { error: 'Failed to promote to wiki' },
       { status: 500 },
     );
   }

@@ -1,18 +1,49 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useParams } from 'next/navigation';
-import Link from 'next/link';
-import { MessageSquare, BookOpen, Loader2, AlertCircle, Sparkles, RefreshCw, Clock } from 'lucide-react';
+import { useParams, useSearchParams } from 'next/navigation';
+import {
+  BookOpen,
+  Loader2,
+  AlertCircle,
+  Sparkles,
+  RefreshCw,
+  Clock,
+} from 'lucide-react';
 import { WikiSidebar } from '@/features/wiki/components/wiki-sidebar';
 import { WikiPageRenderer } from '@/features/wiki/components/wiki-page-renderer';
 import { DiagramViewer } from '@/features/wiki/components/diagram-viewer';
 
-interface WikiPageMeta { id: string; path: string; title: string; updated_at: string; }
-interface DiagramMeta { id: string; path: string | null; type: string; updated_at: string; }
-interface WikiPageFull extends WikiPageMeta { content: string; stale: boolean; }
-interface DiagramFull { id: string; repo_id: string; path: string | null; type: string; mermaid_src: string; updated_at: string; }
-interface DocStaleness { stale: boolean; indexCommitSha: string | null; stalePages: number; staleDiagrams: number; }
+interface WikiPageMeta {
+  id: string;
+  path: string;
+  title: string;
+  updated_at: string;
+}
+interface DiagramMeta {
+  id: string;
+  path: string | null;
+  type: string;
+  updated_at: string;
+}
+interface WikiPageFull extends WikiPageMeta {
+  content: string;
+  stale: boolean;
+}
+interface DiagramFull {
+  id: string;
+  repo_id: string;
+  path: string | null;
+  type: string;
+  mermaid_src: string;
+  updated_at: string;
+}
+interface DocStaleness {
+  stale: boolean;
+  indexCommitSha: string | null;
+  stalePages: number;
+  staleDiagrams: number;
+}
 
 interface WikiIndexData {
   pages?: WikiPageMeta[];
@@ -28,15 +59,35 @@ async function fetchWikiIndex(repoId: string): Promise<WikiIndexData> {
 
 export default function WikiPage() {
   const params = useParams<{ repoId: string }>();
-  const repoId = params.repoId;
+  const searchParams = useSearchParams();
+  const requestedPath = searchParams.get('page');
+  return (
+    <WikiWorkspace
+      key={`${params.repoId}:${requestedPath ?? ''}`}
+      repoId={params.repoId}
+      requestedPath={requestedPath}
+    />
+  );
+}
 
+function WikiWorkspace({
+  repoId,
+  requestedPath,
+}: {
+  repoId: string;
+  requestedPath: string | null;
+}) {
   const [pages, setPages] = useState<WikiPageMeta[]>([]);
   const [diagrams, setDiagrams] = useState<DiagramMeta[]>([]);
   const [staleness, setStaleness] = useState<DocStaleness | null>(null);
   const [selectedPage, setSelectedPage] = useState<WikiPageFull | null>(null);
-  const [selectedDiagram, setSelectedDiagram] = useState<DiagramFull | null>(null);
+  const [selectedDiagram, setSelectedDiagram] = useState<DiagramFull | null>(
+    null,
+  );
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
-  const [selectedDiagramId, setSelectedDiagramId] = useState<string | null>(null);
+  const [selectedDiagramId, setSelectedDiagramId] = useState<string | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
   const [contentLoading, setContentLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -58,40 +109,46 @@ export default function WikiPage() {
     };
   }, []);
 
-  const handleSelectPage = useCallback(async (path: string) => {
-    setSelectedPath(path);
-    setSelectedDiagramId(null);
-    setSelectedDiagram(null);
-    setContentLoading(true);
-    try {
-      const res = await fetch(`/api/github/repos/${repoId}/wiki/${path}`);
-      if (!res.ok) throw new Error('Page not found');
-      const page = await res.json();
-      setSelectedPage(page);
-    } catch {
-      setSelectedPage(null);
-    } finally {
-      setContentLoading(false);
-    }
-  }, [repoId]);
-
-  const handleSelectDiagram = useCallback(async (id: string) => {
-    setSelectedDiagramId(id);
-    setSelectedPath(null);
-    setSelectedPage(null);
-    setContentLoading(true);
-    try {
-      const res = await fetch(`/api/github/repos/${repoId}/diagrams`);
-      if (!res.ok) throw new Error('Failed to load diagrams');
-      const data = await res.json();
-      const diagram = data.diagrams.find((d: DiagramFull) => d.id === id);
-      setSelectedDiagram(diagram ?? null);
-    } catch {
+  const handleSelectPage = useCallback(
+    async (path: string) => {
+      setSelectedPath(path);
+      setSelectedDiagramId(null);
       setSelectedDiagram(null);
-    } finally {
-      setContentLoading(false);
-    }
-  }, [repoId]);
+      setContentLoading(true);
+      try {
+        const res = await fetch(`/api/github/repos/${repoId}/wiki/${path}`);
+        if (!res.ok) throw new Error('Page not found');
+        const page = await res.json();
+        setSelectedPage(page);
+      } catch {
+        setSelectedPage(null);
+      } finally {
+        setContentLoading(false);
+      }
+    },
+    [repoId],
+  );
+
+  const handleSelectDiagram = useCallback(
+    async (id: string) => {
+      setSelectedDiagramId(id);
+      setSelectedPath(null);
+      setSelectedPage(null);
+      setContentLoading(true);
+      try {
+        const res = await fetch(`/api/github/repos/${repoId}/diagrams`);
+        if (!res.ok) throw new Error('Failed to load diagrams');
+        const data = await res.json();
+        const diagram = data.diagrams.find((d: DiagramFull) => d.id === id);
+        setSelectedDiagram(diagram ?? null);
+      } catch {
+        setSelectedDiagram(null);
+      } finally {
+        setContentLoading(false);
+      }
+    },
+    [repoId],
+  );
 
   // Load sidebar index (auto-selects the first page once on initial load)
   const loadIndex = useCallback(
@@ -106,7 +163,10 @@ export default function WikiPage() {
         setStaleness(data.staleness ?? null);
         if (!autoSelectedRef.current) {
           if (pages.length > 0) {
-            await handleSelectPage(pages[0].path);
+            await handleSelectPage(
+              pages.find((page) => page.path === requestedPath)?.path ??
+                pages[0].path,
+            );
           } else if (diagrams.length > 0) {
             await handleSelectDiagram(diagrams[0].id);
           }
@@ -118,7 +178,7 @@ export default function WikiPage() {
         setLoading(false);
       }
     },
-    [repoId, handleSelectPage, handleSelectDiagram]
+    [repoId, handleSelectPage, handleSelectDiagram, requestedPath],
   );
 
   useEffect(() => {
@@ -135,14 +195,18 @@ export default function WikiPage() {
         setStaleness(data.staleness ?? null);
         if (!autoSelectedRef.current) {
           if (pages.length > 0) {
-            await handleSelectPage(pages[0].path);
+            await handleSelectPage(
+              pages.find((page) => page.path === requestedPath)?.path ??
+                pages[0].path,
+            );
           } else if (diagrams.length > 0) {
             await handleSelectDiagram(diagrams[0].id);
           }
           autoSelectedRef.current = true;
         }
       } catch (err) {
-        if (!ignore) setError(err instanceof Error ? err.message : 'Failed to load wiki');
+        if (!ignore)
+          setError(err instanceof Error ? err.message : 'Failed to load wiki');
       } finally {
         if (!ignore) setLoading(false);
       }
@@ -152,12 +216,14 @@ export default function WikiPage() {
     return () => {
       ignore = true;
     };
-  }, [repoId, handleSelectPage, handleSelectDiagram]);
+  }, [repoId, handleSelectPage, handleSelectDiagram, requestedPath]);
 
   const handleContentUpdated = useCallback(async () => {
     if (!selectedPage) return;
     try {
-      const res = await fetch(`/api/github/repos/${repoId}/wiki/${selectedPage.path}`);
+      const res = await fetch(
+        `/api/github/repos/${repoId}/wiki/${selectedPage.path}`,
+      );
       if (!res.ok) throw new Error('Failed to reload page');
       const page = await res.json();
       setSelectedPage(page);
@@ -174,11 +240,13 @@ export default function WikiPage() {
         if (!pollActiveRef.current) return;
         try {
           const res = await fetch(
-            `/api/github/repos/${repoId}/wiki/generate/${jobId}`
+            `/api/github/repos/${repoId}/wiki/generate/${jobId}`,
           );
           const data = await res.json().catch(() => ({}));
           if (!res.ok) {
-            throw new Error(data.error || 'Failed to check generation progress');
+            throw new Error(
+              data.error || 'Failed to check generation progress',
+            );
           }
 
           setGenerationProgress(data.progress ?? 0);
@@ -199,13 +267,17 @@ export default function WikiPage() {
           pollTimerRef.current = window.setTimeout(tick, 2000);
         } catch (err) {
           setGenerating(false);
-          setError(err instanceof Error ? err.message : 'Failed to check generation progress');
+          setError(
+            err instanceof Error
+              ? err.message
+              : 'Failed to check generation progress',
+          );
         }
       };
 
       await tick();
     },
-    [repoId, loadIndex]
+    [repoId, loadIndex],
   );
 
   const handleGenerateWiki = useCallback(async () => {
@@ -235,22 +307,6 @@ export default function WikiPage() {
 
   return (
     <div className="wiki-layout">
-      {/* Top Navigation */}
-      <header className="wiki-topbar">
-        <div className="wiki-topbar-brand">
-          <BookOpen size={18} />
-          <span>Wiki</span>
-        </div>
-        <nav className="wiki-topbar-tabs">
-          <span className="wiki-tab wiki-tab--active">
-            <BookOpen size={14} /> Wiki
-          </span>
-          <Link href={`/dashboard/repos/${repoId}/chat`} className="wiki-tab">
-            <MessageSquare size={14} /> Chat
-          </Link>
-        </nav>
-      </header>
-
       <div className="wiki-body">
         {/* Sidebar */}
         {loading ? (
@@ -272,6 +328,25 @@ export default function WikiPage() {
 
         {/* Main Content */}
         <main className="wiki-main">
+          {(pages.length > 0 || diagrams.length > 0) && (
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-2 border-b border-zinc-100 pb-4">
+              <span className="workspace-eyebrow">Repository knowledge</span>
+              <button
+                className="workspace-button"
+                onClick={handleGenerateWiki}
+                disabled={generating}
+              >
+                {generating ? (
+                  <Loader2 size={13} className="wiki-spin" />
+                ) : (
+                  <RefreshCw size={13} />
+                )}
+                {generating
+                  ? `${generationStep} ${generationProgress}%`
+                  : 'Regenerate wiki'}
+              </button>
+            </div>
+          )}
           {error && (
             <div className="wiki-error">
               <AlertCircle size={20} />
@@ -286,15 +361,22 @@ export default function WikiPage() {
                 <strong>This wiki is out of date.</strong>
                 <span>
                   {[
-                    staleness.stalePages ? `${staleness.stalePages} page${staleness.stalePages === 1 ? '' : 's'}` : '',
-                    staleness.staleDiagrams ? `${staleness.staleDiagrams} diagram${staleness.staleDiagrams === 1 ? '' : 's'}` : '',
+                    staleness.stalePages
+                      ? `${staleness.stalePages} page${staleness.stalePages === 1 ? '' : 's'}`
+                      : '',
+                    staleness.staleDiagrams
+                      ? `${staleness.staleDiagrams} diagram${staleness.staleDiagrams === 1 ? '' : 's'}`
+                      : '',
                   ]
                     .filter(Boolean)
                     .join(' and ')}{' '}
                   generated before the last repo sync.
                 </span>
               </div>
-              <button className="wiki-generate-btn wiki-generate-btn--sm" onClick={handleGenerateWiki}>
+              <button
+                className="wiki-generate-btn wiki-generate-btn--sm"
+                onClick={handleGenerateWiki}
+              >
                 <RefreshCw size={14} /> Regenerate
               </button>
             </div>
@@ -309,6 +391,7 @@ export default function WikiPage() {
 
           {!contentLoading && selectedPage && (
             <WikiPageRenderer
+              key={selectedPage.id}
               title={selectedPage.title}
               content={selectedPage.content}
               updatedAt={selectedPage.updated_at}
@@ -322,7 +405,9 @@ export default function WikiPage() {
           {!contentLoading && selectedDiagram && (
             <div className="wiki-diagram-page">
               <h1 className="wiki-article-title">
-                {selectedDiagram.type.charAt(0) + selectedDiagram.type.slice(1).toLowerCase()} Diagram
+                {selectedDiagram.type.charAt(0) +
+                  selectedDiagram.type.slice(1).toLowerCase()}{' '}
+                Diagram
               </h1>
               <DiagramViewer mermaidSrc={selectedDiagram.mermaid_src} />
             </div>
@@ -331,7 +416,9 @@ export default function WikiPage() {
           {!contentLoading && !selectedPage && !selectedDiagram && !loading && (
             <div className="wiki-empty-state">
               <BookOpen size={48} className="wiki-empty-icon" />
-              <h2>{generating ? 'Generating your wiki' : 'No wiki page selected'}</h2>
+              <h2>
+                {generating ? 'Generating your wiki' : 'No wiki page selected'}
+              </h2>
               {generating ? (
                 <div className="wiki-generating">
                   <Loader2 size={24} className="wiki-spin" />
@@ -351,8 +438,8 @@ export default function WikiPage() {
                 <>
                   <p>
                     The wiki hasn&apos;t been generated yet. Generate an
-                    AI-powered wiki with page summaries and architecture diagrams
-                    from your indexed repo.
+                    AI-powered wiki with page summaries and architecture
+                    diagrams from your indexed repo.
                   </p>
                   <button
                     className="wiki-generate-btn"

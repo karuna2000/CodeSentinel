@@ -52,9 +52,18 @@ const EDGE_TYPE_WEIGHTS: Record<string, number> = {
   FETCHES_ROUTE: 1,
 };
 
+const WEIGHTED_EDGE_TYPES = Object.keys(EDGE_TYPE_WEIGHTS) as GraphEdgeType[];
+/** Hard cap on edges loaded per hop so a dense seed cannot scan the whole graph. */
+export const MAX_TRAVERSAL_EDGES = 200;
+
 /** Reciprocal Rank Fusion: 1 / (k + 1-based rank). */
 function rrf(rank: number): number {
   return 1 / (RRF_K + rank);
+}
+
+/** Escape `\`, `%`, and `_` so user search terms cannot become LIKE wildcards. */
+export function escapeLikePattern(term: string): string {
+  return term.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
 }
 
 export async function retrieveContext(
@@ -79,7 +88,7 @@ export async function retrieveContext(
     // names for common terms like "client" or "db". Add substring containment on
     // name/signature so identifier fragments are retrievable (ranked below full
     // lexeme matches via NULLS LAST).
-    const likePatterns = searchTerms.map((t) => `%${t.toLowerCase()}%`);
+    const likePatterns = searchTerms.map((t) => `%${escapeLikePattern(t.toLowerCase())}%`);
     const rankedKeyword = await db.$queryRaw<GraphNode[]>`
       SELECT id, repo_id, file_id, type, name, code_snippet, signature, documentation,
              start_line, end_line, start_byte, end_byte, content_hash, created_at,
@@ -97,8 +106,8 @@ export async function retrieveContext(
         OR to_tsvector('simple', coalesce(signature, '')) @@ websearch_to_tsquery('simple', ${termQuery})
         OR to_tsvector('english', coalesce(documentation, '')) @@ websearch_to_tsquery('simple', ${termQuery})
         OR to_tsvector('simple', coalesce(code_snippet, '')) @@ websearch_to_tsquery('simple', ${termQuery})
-        OR lower(name) LIKE ANY (${likePatterns})
-        OR lower(signature) LIKE ANY (${likePatterns})
+        OR lower(name) LIKE ANY (${likePatterns}) ESCAPE chr(92)
+        OR lower(signature) LIKE ANY (${likePatterns}) ESCAPE chr(92)
       )
       ORDER BY rank DESC NULLS LAST
       LIMIT ${MAX_KEYWORD}
@@ -166,9 +175,11 @@ export async function retrieveContext(
     const hop1Edges = await db.graphEdge.findMany({
       where: {
         repo_id: repoId,
-        ...(relations ? { type: { in: relations } } : {}),
+        type: { in: relations ?? WEIGHTED_EDGE_TYPES },
         OR: [{ source_node_id: { in: seedArr } }, { target_node_id: { in: seedArr } }],
       },
+      orderBy: [{ type: 'asc' }, { id: 'asc' }],
+      take: MAX_TRAVERSAL_EDGES,
     });
 
     const hop1Strong = new Set<string>();
@@ -223,6 +234,8 @@ export async function retrieveContext(
               { target_node_id: { in: Array.from(hop1Strong) } },
             ],
           },
+          orderBy: { id: 'asc' },
+          take: MAX_TRAVERSAL_EDGES,
         });
 
       for (const edge of hop2Edges) {

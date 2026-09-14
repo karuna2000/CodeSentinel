@@ -29,10 +29,10 @@ export async function GET() {
     
     return NextResponse.json(response, { status: isHealthy ? 200 : 503 });
   } catch (error) {
+    console.error('Health check failed:', error);
     return NextResponse.json({
       status: 'error',
       db: dbStatus,
-      error: error instanceof Error ? error.message : String(error)
     }, { status: 503 });
   }
 }

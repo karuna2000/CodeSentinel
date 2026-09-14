@@ -84,7 +84,7 @@ export async function POST(
       userId,
     });
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to enqueue wiki generation' },
+      { error: 'Failed to enqueue wiki generation' },
       { status: 500 }
     );
   }

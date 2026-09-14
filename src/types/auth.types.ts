@@ -10,6 +10,7 @@ declare module 'next-auth' {
     error?: 'RefreshAccessTokenError';
     user: {
       id: string;
+      githubLogin?: string;
     } & DefaultSession['user'];
   }
 
@@ -23,6 +24,8 @@ declare module 'next-auth/jwt' {
     accessToken?: string;
     accessTokenExpires?: number;
     refreshToken?: string;
+    githubLogin?: string;
+    githubLoginAttempted?: boolean;
     error?: 'RefreshAccessTokenError';
   }
 }

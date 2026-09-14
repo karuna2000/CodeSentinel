@@ -1,9 +1,8 @@
 import type { ReactNode } from 'react';
-import { BookOpen, ChevronDown, Database, MessageCircle, Network, Settings } from 'lucide-react';
+import { BookOpen, ChevronDown, Database, Network, Settings } from 'lucide-react';
 
 const navigation = [
-  { label: 'Repositories', icon: Database, href: '/dashboard/repos' },
-  { label: 'Chat', icon: MessageCircle, href: '/dashboard' },
+  { label: 'Repositories', icon: Database, href: '/dashboard' },
   { label: 'Architecture', icon: Network, href: '/dashboard' },
   { label: 'Wiki', icon: BookOpen, href: '/dashboard' },
   { label: 'Settings', icon: Settings, href: '/dashboard' },
