@@ -5,5 +5,5 @@
     "tsBuildInfoFile": ".tsbuildinfo.typecheck"
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", "**/*.mts"],
-  "exclude": ["node_modules", ".next", ".next/dev"]
+  "exclude": ["node_modules", ".next", ".next/dev", "docker/**"]
 }

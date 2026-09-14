@@ -1,17 +1,8 @@
-import { Langfuse } from 'langfuse';
+import type { Attributes } from '@opentelemetry/api';
 import type { Prisma } from '@prisma/client';
-import { env } from '@/lib/env';
 import { db } from '@/lib/db';
-
-// Initialize Langfuse only if keys are present
-export const langfuse =
-  env.langfuse.publicKey && env.langfuse.secretKey
-    ? new Langfuse({
-        publicKey: env.langfuse.publicKey,
-        secretKey: env.langfuse.secretKey,
-        baseUrl: env.langfuse.host,
-      })
-    : null;
+import { getTracer } from '@/lib/tracing';
+import { sanitizeTelemetryMetadata } from '@/lib/observability-sanitize';
 
 type TraceMetadata = Record<string, unknown>;
 
@@ -24,24 +15,44 @@ function pickString(meta: TraceMetadata, keys: string[]): string | undefined {
   return undefined;
 }
 
+/** Flatten one level for span attributes (no PII: values are truncated). */
+function toSpanAttributes(meta: TraceMetadata): Attributes {
+  const attrs: Attributes = {};
+  for (const [key, value] of Object.entries(meta)) {
+    if (value === null || value === undefined) continue;
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      attrs[`event.${key}`] =
+        typeof value === 'string' && value.length > 200 ? `${value.slice(0, 200)}…` : value;
+    } else if (Array.isArray(value)) {
+      attrs[`event.${key}.count`] = value.length;
+    }
+  }
+  return attrs;
+}
+
 /**
  * Traces a custom event.
  *
- * Dual sink: Langfuse when configured (cloud mirror), always Postgres
- * (`trace_events`, the queryable source for /admin/observability).
- * Fire-and-forget — tracing must never fail or slow the caller, so the DB
- * write is unawaited and self-contained (its own failure is swallowed).
+ * Triple sink:
+ * - Postgres (`trace_events`) — always, authoritative for /admin/observability.
+ * - OpenTelemetry span (`trace.event`, immediate open/close) — flows to
+ *   Langfuse via LangfuseSpanProcessor when keys are set, or to the
+ *   configured OTLP endpoint. Drops silently with no SDK registered.
+ * Fire-and-forget — tracing must never fail or slow the caller.
  */
 export function traceEvent(name: string, metadata?: TraceMetadata): void {
-  if (langfuse) {
-    try {
-      langfuse.trace({ name, metadata });
-    } catch {
-      // Cloud mirror is best-effort; the DB sink below is authoritative.
-    }
+  // Sanitize once: both sinks below receive only scrubbed data.
+  const meta = sanitizeTelemetryMetadata(metadata ?? {});
+
+  try {
+    const span = getTracer().startSpan('trace.event', {
+      attributes: { 'event.name': name, ...toSpanAttributes(meta) },
+    });
+    span.end();
+  } catch {
+    // Span export is best-effort; the DB sink below is authoritative.
   }
 
-  const meta: TraceMetadata = metadata ?? {};
   // Never throw: property access on a partially-mocked db (unit tests) must
   // degrade to a silent no-op, and sink failures must not reach the caller.
   try {

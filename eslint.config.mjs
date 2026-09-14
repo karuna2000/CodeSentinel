@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Generated Supabase edge-runtime bundle (minified single-file artifact).
     "supabase/.temp/**",
+    // Self-hosted Langfuse stack (upstream clone + secrets, gitignored).
+    "docker/**",
   ]),
 ]);
 
