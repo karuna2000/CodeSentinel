@@ -99,6 +99,7 @@ const SECRET_PATTERNS: Array<{ name: string; re: RegExp }> = [
   { name: 'slack-token', re: /\bxox[abpr]-([A-Za-z0-9-]{10,})\b/ },
   { name: 'api-key-value', re: /\b(api[_-]?key|secret|token|password)\s*[:=]\s*['"]?\S{8,}['"]?/i },
   { name: 'openai-key', re: /\bsk-(ant|proj|live)-[A-Za-z0-9-_]{10,}\b/ },
+  { name: 'nvidia-key', re: /\bnvapi-[A-Za-z0-9-_]{16,}\b/ },
 ];
 
 export function scanSecretsLeak(answer: string): GateResult {

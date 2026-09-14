@@ -36,10 +36,10 @@ Middleware applies rate limiting to auth routes using IP-based keys.`,
   {
     systemContext: `=== RELEVANT CODE NODES ===
 --- Node: src/lib/llm/provider.ts (FILE) ---
-Uses NVIDIA NIM API with model minimaxai/minimax-m3.
+Uses NVIDIA NIM API with model meta/llama-3.2-11b-vision-instruct.
 Base URL: https://integrate.api.nvidia.com/v1`,
     question: 'What LLM provider does this project use?',
-    mustContain: ['NVIDIA', 'minimax'],
+    mustContain: ['NVIDIA', 'llama'],
     mustNotContain: ['OpenAI', 'Anthropic', 'Claude'],
   },
   {

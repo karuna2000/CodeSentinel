@@ -1,5 +1,5 @@
 /** Optional configuration: malformed telemetry settings disable that sink. */
-export function observabilityConfig(source: NodeJS.ProcessEnv = process.env) {
+export function observabilityConfig(source: Record<string, string | undefined> = process.env) {
   const enabled = source.OBSERVABILITY_ENABLED !== 'false';
   const url = (value: string | undefined): string | undefined => {
     if (!value) return undefined;

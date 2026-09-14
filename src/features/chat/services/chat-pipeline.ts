@@ -27,6 +27,7 @@ import {
   judgeVerdictsTotal,
 } from '@/lib/metrics';
 import { withSpan } from '@/lib/tracing';
+import { sanitizeError } from '@/lib/observability-sanitize';
 import { observabilityConfig } from '@/lib/observability-config';
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
@@ -406,7 +407,7 @@ export async function answerQuestion(opts: AnswerOptions): Promise<AnswerResult>
         });
       } catch (err) {
         logger.error('[Chat]', 'Post-answer eval persistence failed', {
-          error: err instanceof Error ? err.message : String(err),
+          error: sanitizeError(err),
           repoId,
         });
       }

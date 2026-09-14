@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
   cacheEventsTotal,
   chatAnswersTotal,
@@ -10,6 +10,12 @@ import {
 } from '../metrics';
 
 describe('metrics registry', () => {
+  beforeEach(() => {
+    // Module-global counters: reset so repetition and cross-file pollution
+    // in the same worker cannot turn absolute assertions into flakes.
+    registry.resetMetrics();
+  });
+
   it('exposes prometheus text with our counters after increments', async () => {
     chatAnswersTotal.inc({ intent: 'locate', status: 'grounded', blocked: 'false' });
     guardrailBlocksTotal.inc({ gate: 'citation_coverage' });

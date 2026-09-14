@@ -49,6 +49,7 @@ const SECRET_VALUE_PATTERNS = [
   /\bAKIA[0-9A-Z]{16}\b/,
   /\bxox[abpr]-([A-Za-z0-9-]{10,})\b/,
   /\bsk-(ant|proj|live)-[A-Za-z0-9-_]{10,}\b/,
+  /\bnvapi-[A-Za-z0-9-_]{16,}\b/,
   /\bBearer\s+[A-Za-z0-9\-._~+/]+/i,
   /\b(?:postgres(?:ql)?|redis|https?):\/\/[^\s/@]+:[^\s/@]+@/i,
   /\b(?:api[_-]?key|password|secret|token)\s*[:=]\s*['"]?\S{8,}/i,

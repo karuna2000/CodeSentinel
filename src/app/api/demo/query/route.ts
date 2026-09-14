@@ -6,15 +6,12 @@ import { buildRateLimitedResponse } from '@/lib/security';
 import { db } from '@/lib/db';
 import { env } from '@/lib/env';
 import { logger } from '@/lib/logger';
+import { hashClientIp, normalizeClientIp } from '@/lib/request-ip';
 import { INPUT_LIMITS } from '@/config/app.config';
 
 export const maxDuration = 60;
 
 const DEMO_RATE_LIMIT = { windowMs: 60_000, maxRequests: 20 };
-
-function clientIp(request: Request): string {
-  return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '127.0.0.1';
-}
 
 /**
  * POST /api/demo/query — anonymous grounded Q&A over allowlisted repos.
@@ -22,8 +19,10 @@ function clientIp(request: Request): string {
  * Access control is the allowlist, not a session: the served repo is always
  * the first DEMO_REPO_IDS entry (no repoId parameter, so nothing outside the
  * list is addressable). Abuse containment is IP rate limiting + the shared
- * daily token budget keyed by `demo:{ip}`. No write endpoints exist in demo
- * scope (no promote / wiki-generate / index).
+ * daily token budget keyed by a HASHED ip (`demo:{hash}`) — the raw header is
+ * attacker-controlled, so it is validated, never persisted, and only appears
+ * truncated in local logs. No write endpoints exist in demo scope
+ * (no promote / wiki-generate / index).
  */
 export async function POST(request: Request) {
   const demoRepoIds = env.demo.repoIds;
@@ -31,12 +30,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Demo is not enabled' }, { status: 404 });
   }
 
-  const ip = clientIp(request);
-  const actorId = `demo:${ip}`;
+  const ip = normalizeClientIp(request.headers.get('x-forwarded-for'));
+  const actorId = `demo:${hashClientIp(ip)}`;
 
-  const { allowed, retryAfterMs } = await checkRateLimit(`demo:${ip}`, DEMO_RATE_LIMIT);
+  const { allowed, retryAfterMs } = await checkRateLimit(`demo:${actorId}`, DEMO_RATE_LIMIT);
   if (!allowed) {
-    logger.warn('[Demo]', `Rate limit hit for IP ${ip}`);
+    logger.warn('[Demo]', `Rate limit hit for IP ${ip.slice(0, 45)}`);
     return buildRateLimitedResponse(retryAfterMs);
   }
 

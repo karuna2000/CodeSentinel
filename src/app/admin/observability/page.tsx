@@ -11,6 +11,10 @@ export const metadata = {
 
 export const dynamic = 'force-dynamic';
 
+// NOTE (security): this page has no admin role — every query below MUST stay
+// scoped to the session user_id. Any future query added here must filter by
+// user_id, or it becomes a cross-user data leak behind an "admin" URL.
+
 const PAGE_SIZE = 50;
 
 interface PageProps {

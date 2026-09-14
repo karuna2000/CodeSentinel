@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  CHAT_CACHE_TTL_SECONDS,
   buildCacheKey,
+  getCacheClient,
   getCachedAnswer,
   hashQuery,
+  isCacheEnabled,
   setCachedAnswer,
   type CachedAnswer,
 } from '../chat-cache';
@@ -76,8 +79,7 @@ describe('getCachedAnswer', () => {
   });
 });
 
-describe('setCachedAnswer', () => {
-  it('returns false without a client', async () => {
+describe('setCachedAnswer', () => {  it('returns false without a client', async () => {
     await expect(setCachedAnswer('k', ANSWER, null)).resolves.toBe(false);
   });
 
@@ -85,9 +87,31 @@ describe('setCachedAnswer', () => {
     const store = new Map<string, string>();
     const ok = fakeClient(store);
     await expect(setCachedAnswer('k', ANSWER, ok as never)).resolves.toBe(true);
-    expect(ok.set).toHaveBeenCalledWith('k', expect.any(String), { EX: expect.any(Number) });
+    expect(ok.set).toHaveBeenCalledWith('k', expect.any(String), { EX: CHAT_CACHE_TTL_SECONDS });
+    expect(CHAT_CACHE_TTL_SECONDS).toBe(7 * 24 * 3600);
     await expect(setCachedAnswer('k', ANSWER, fakeClient(store, true) as never)).resolves.toBe(
       false,
     );
+  });
+});
+
+describe('client lifecycle', () => {
+  it('returns null without REDIS_URL and passes overrides through', async () => {
+    const saved = process.env.REDIS_URL;
+    delete process.env.REDIS_URL;
+    try {
+      await expect(getCacheClient()).resolves.toBeNull();
+      expect(isCacheEnabled()).toBe(false);
+    } finally {
+      if (saved !== undefined) process.env.REDIS_URL = saved;
+    }
+    const override = fakeClient();
+    await expect(getCacheClient(override as never)).resolves.toBe(override);
+  });
+
+  it('pins current hash behavior (trimmed, case-sensitive, 32 hex chars)', () => {
+    expect(hashQuery('  Hi  ')).toBe(hashQuery('Hi'));
+    expect(hashQuery('Auth')).not.toBe(hashQuery('auth'));
+    expect(hashQuery('q')).toMatch(/^[0-9a-f]{32}$/);
   });
 });

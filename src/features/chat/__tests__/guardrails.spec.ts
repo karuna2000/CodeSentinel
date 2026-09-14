@@ -93,3 +93,44 @@ describe('runGuardrails', () => {
     expect(BLOCKED_FALLBACK.length).toBeGreaterThan(0);
   });
 });
+
+describe('boundaries and Set inputs', () => {
+  it('rejects unknown tags even in short replies (check order matters)', () => {
+    expect(checkCitationCoverage('Hi [E9]', ['E1'], 1).pass).toBe(false);
+  });
+
+  it('enforces the substantive threshold around 120 chars', () => {
+    const uncited = (n: number) => 'a'.repeat(n);
+    expect(checkCitationCoverage(uncited(119), ['E1'], 1).pass).toBe(true);
+    expect(checkCitationCoverage(uncited(120), ['E1'], 1).pass).toBe(false);
+  });
+
+  it('accepts valid ids as a Set', () => {
+    expect(checkCitationCoverage(LONG_GROUNDED, new Set(['E1', 'E2']), 2).pass).toBe(true);
+  });
+
+  it('reports both failures and still extracts tags', () => {
+    const v = runGuardrails(
+      'No citation here but leaks nvapi-0123456789abcdef0123456789 in passing discussion of the module behavior overall and more trailing words.',
+      { validTagIds: ['E1'], evidenceCount: 2 },
+    );
+    expect(v.pass).toBe(false);
+    expect(v.results.filter((r) => !r.pass)).toHaveLength(2);
+  });
+
+  it.each([
+    ['xoxb-123456789012-triage', false],
+    ['sk-live-0123456789abcdef', false],
+    ['github_pat_0123456789abcdefghij', false],
+    ['nvapi-0123456789abcdef0123456789', false],
+    ['token: abc', true],
+    ['the password field is required', true],
+  ])('secret pattern %s → pass=%s', (value, pass) => {
+    expect(scanSecretsLeak(`Use ${value} to connect.`).pass).toBe(pass);
+  });
+
+  it('treats zero-padded tags as unknown', () => {
+    expect(extractCitedTags('[E01]')).toEqual(['E01']);
+    expect(checkCitationCoverage('See [E01] for details here.', ['E1'], 1).pass).toBe(false);
+  });
+});

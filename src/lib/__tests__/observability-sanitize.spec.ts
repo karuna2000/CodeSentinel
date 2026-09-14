@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest';
-import { sanitizeError, sanitizeTelemetryMetadata } from '../observability-sanitize';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  sanitizeError,
+  sanitizeHeaders,
+  sanitizeTelemetryMetadata,
+} from '../observability-sanitize';
 
 describe('sanitizeTelemetryMetadata', () => {
   it('removes SDK content and raw exception attributes at the export boundary', () => {
@@ -85,5 +89,50 @@ describe('sanitizeError', () => {
     expect(sanitizeError(new Error('connect AKIAIOSFODNN7EXAMPLE failed'))).toBe('[REDACTED_SECRET]');
     expect(sanitizeError(new Error('plain failure'))).toBe('plain failure');
     expect(sanitizeError('x'.repeat(1000)).length).toBeLessThanOrEqual(500);
+  });
+});
+
+describe('sanitizeHeaders', () => {
+  it('keeps only operational headers, case-insensitively', () => {
+    expect(
+      sanitizeHeaders({
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer secret',
+        Cookie: 'session=abc',
+        'X-Custom': '1',
+      }),
+    ).toEqual({ 'Content-Type': 'application/json' });
+  });
+});
+
+describe('capture flags and shapes', () => {
+  it('retains AI content keys only under explicit capture flags', () => {
+    const input = { 'ai.prompt.messages': [{ role: 'user' }] };
+    expect(sanitizeTelemetryMetadata(input)).toEqual({});
+    vi.stubEnv('OBS_CAPTURE_CONTENT', 'true');
+    vi.stubEnv('OBS_CAPTURE_PROMPTS', 'true');
+    try {
+      expect(sanitizeTelemetryMetadata(input)).toEqual(input);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('redacts Bearer tokens and credentialed URLs', () => {
+    expect(
+      sanitizeTelemetryMetadata({ note: 'call Bearer abcDEF123-_.~+/ end' }),
+    ).toEqual({ note: '[REDACTED_SECRET]' });
+    expect(
+      sanitizeTelemetryMetadata({ dsn: 'postgres://bob:hunter2@db:5432/app' }),
+    ).toEqual({ dsn: '[REDACTED_SECRET]' });
+    expect(
+      sanitizeTelemetryMetadata({ key: 'nvapi-0123456789abcdef0123456789' }),
+    ).toEqual({ key: '[REDACTED_SECRET]' });
+  });
+
+  it('truncates long strings with the length suffix and caps arrays', () => {
+    const out = sanitizeTelemetryMetadata({ blob: 'y'.repeat(501), list: Array(60).fill('a') });
+    expect(out.blob).toBe(`y`.repeat(200) + `…[truncated 501 chars]`);
+    expect((out.list as unknown[]).length).toBe(50);
   });
 });

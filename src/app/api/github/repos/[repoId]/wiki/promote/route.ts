@@ -45,6 +45,13 @@ export async function POST(
       );
     }
 
+    if (typeof question !== 'string' || question.length > INPUT_LIMITS.chatMessageMaxChars) {
+      return NextResponse.json(
+        { error: `Question too long. Maximum is ${INPUT_LIMITS.chatMessageMaxChars} characters.` },
+        { status: 400 },
+      );
+    }
+
     const repo = await db.repository.findFirst({
       where: { id: repoId, user_id: userId },
       select: { id: true, name: true, commit_sha: true },

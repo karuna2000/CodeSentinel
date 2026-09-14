@@ -22,6 +22,11 @@ export async function GET(
   const { repoId, path: pathSegments } = params;
   const pagePath = pathSegments.join('/');
 
+  const { allowed, retryAfterMs } = await checkRateLimit(`wiki:${session.user.id}`, WIKI_RATE_LIMIT);
+  if (!allowed) {
+    return buildRateLimitedResponse(retryAfterMs);
+  }
+
   const repo = await db.repository.findFirst({
     where: { id: repoId, user_id: session.user.id },
     select: { id: true, commit_sha: true },

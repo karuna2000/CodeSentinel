@@ -3,6 +3,7 @@ import { generateObject } from 'ai';
 import { withResilience } from '@/lib/llm/resilience';
 import { recordUsage } from '@/lib/llm/metering';
 import { logger } from '@/lib/logger';
+import { sanitizeError } from '@/lib/observability-sanitize';
 
 const JudgeSchema = z.object({
   pass: z.boolean().describe('True when every symbol/file in the answer appears in the context'),
@@ -51,7 +52,7 @@ export async function judgeGroundedness(
         { userId: meta.userId, repoId: meta.repoId, feature: 'guardrail-judge' },
       ).catch((err: unknown) =>
         logger.error('[Chat][Judge]', 'Failed to record usage', {
-          error: err instanceof Error ? err.message : String(err),
+          error: sanitizeError(err),
         }),
       );
     }
@@ -59,7 +60,7 @@ export async function judgeGroundedness(
     return { pass: object.object.pass, reason: object.object.reason, judged: true };
   } catch (err) {
     logger.warn('[Chat][Judge]', 'Groundedness judge failed, failing open', {
-      error: err instanceof Error ? err.message : String(err),
+      error: sanitizeError(err),
     });
     return { pass: true, reason: 'judge-unavailable', judged: false };
   }

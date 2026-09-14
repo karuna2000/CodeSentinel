@@ -3,6 +3,7 @@ import { generateObject } from 'ai';
 import { withResilience } from '@/lib/llm/resilience';
 import { recordUsage } from '@/lib/llm/metering';
 import { logger } from '@/lib/logger';
+import { sanitizeError } from '@/lib/observability-sanitize';
 import type { ChatIntent, ClassifiedIntent, GraphDirection } from './types';
 
 const IntentEnum = z.enum([
@@ -209,7 +210,7 @@ Rules:
     return { intent: intent as ChatIntent, searchTerms, confident: false };
   } catch (err) {
     logger.warn('[Chat][Intent]', 'Model intent classification failed, defaulting to explain', {
-      error: err instanceof Error ? err.message : String(err),
+      error: sanitizeError(err),
     });
     return { intent: 'explain', searchTerms, confident: false };
   }

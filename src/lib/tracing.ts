@@ -10,9 +10,12 @@ import { sanitizeTelemetryMetadata } from '@/lib/observability-sanitize';
  * API, so it is safe to import anywhere, including unit tests (global
  * default = no-op tracer when no SDK is registered).
  *
- * Privacy rule: span attributes carry shapes, never content — query text,
- * answers, and user ids stay out of vendor traces. Counts, intents, and
- * latencies are fine.
+ * Privacy rule: span attributes carry shapes and opaque identifiers, never
+ * content or secrets — query text, answers, and raw credentials stay out of
+ * vendor traces. Opaque internal ids (session sub, repo id) are permitted
+ * per the identity model (spec §8: user_id as opaque ID, repository_id as
+ * identifier); file paths are allowed as attributes but never as metric
+ * labels. Counts, intents, and latencies are fine.
  */
 
 import { observabilityConfig } from './observability-config';
