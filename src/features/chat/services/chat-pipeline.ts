@@ -20,11 +20,11 @@ import {
 import { withResilience } from '@/lib/llm/resilience';
 import { trackStreamUsage } from '@/lib/llm/metering';
 import {
-  cacheEventsTotal,
-  chatAnswersTotal,
-  chatLatencySeconds,
-  guardrailBlocksTotal,
-  judgeVerdictsTotal,
+  recordCacheEvent,
+  recordChatAnswer,
+  recordChatLatency,
+  recordGuardrailBlock,
+  recordJudgeVerdict,
 } from '@/lib/metrics';
 import { withSpan } from '@/lib/tracing';
 import { sanitizeError } from '@/lib/observability-sanitize';
@@ -162,9 +162,9 @@ export async function answerQuestion(opts: AnswerOptions): Promise<AnswerResult>
   const cached = await getCachedAnswer(cacheKey, cacheClient);
   if (cached) {
     traceEvent('chat_cache_hit', { userId: actorId, repoId, intent: cached.intent });
-    cacheEventsTotal.inc({ result: 'hit' });
-    chatAnswersTotal.inc({ intent: cached.intent, status: cached.status, blocked: 'false' });
-    chatLatencySeconds.observe((performance.now() - startedAt) / 1000);
+    recordCacheEvent('hit');
+    recordChatAnswer({ intent: cached.intent, status: cached.status, blocked: 'false' });
+    recordChatLatency((performance.now() - startedAt) / 1000);
     logger.info('[Chat]', 'cache hit', {
       userId: actorId,
       repoId,
@@ -316,7 +316,7 @@ export async function answerQuestion(opts: AnswerOptions): Promise<AnswerResult>
         gates,
       };
       void setCachedAnswer(cacheKey, entry, cacheClient).then((stored) => {
-        cacheEventsTotal.inc({ result: stored ? 'store' : 'store_failed' });
+        recordCacheEvent(stored ? 'store' : 'store_failed');
         traceEvent(stored ? 'chat_cache_store' : 'chat_cache_store_failed', {
           userId: actorId,
           repoId,
@@ -324,7 +324,7 @@ export async function answerQuestion(opts: AnswerOptions): Promise<AnswerResult>
         });
       });
     } else {
-      cacheEventsTotal.inc({ result: 'skip' });
+      recordCacheEvent('skip');
       traceEvent('chat_cache_skip', {
         userId: actorId,
         repoId,
@@ -347,14 +347,14 @@ export async function answerQuestion(opts: AnswerOptions): Promise<AnswerResult>
     gates,
     retrievalMs: Math.round(performance.now() - startedAt),
   });
-  chatAnswersTotal.inc({
+  recordChatAnswer({
     intent: classified.intent,
     status,
     blocked: String(verdict.blocked),
   });
-  chatLatencySeconds.observe((performance.now() - startedAt) / 1000);
+  recordChatLatency((performance.now() - startedAt) / 1000);
   for (const g of verdict.results) {
-    if (!g.pass) guardrailBlocksTotal.inc({ gate: g.gate });
+    if (!g.pass) recordGuardrailBlock(g.gate);
   }
   traceEvent('chat_gated', {
     userId: actorId,
@@ -379,7 +379,7 @@ export async function answerQuestion(opts: AnswerOptions): Promise<AnswerResult>
               span.setAttributes({ 'judge.pass': v.pass, 'judge.reason': v.reason, 'judge.ran': v.judged });
               return v;
             });
-        judgeVerdictsTotal.inc({ pass: String(judged.pass) });
+        recordJudgeVerdict(judged.pass);
         traceEvent('chat_judged', {
           userId: actorId,
           repoId,

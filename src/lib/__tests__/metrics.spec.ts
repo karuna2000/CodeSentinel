@@ -6,6 +6,11 @@ import {
   ensureMetrics,
   guardrailBlocksTotal,
   judgeVerdictsTotal,
+  recordCacheEvent,
+  recordChatAnswer,
+  recordChatLatency,
+  recordGuardrailBlock,
+  recordJudgeVerdict,
   registry,
 } from '../metrics';
 
@@ -35,5 +40,20 @@ describe('metrics registry', () => {
   it('never exposes user, repo, or query labels', async () => {
     const text = await ensureMetrics().metrics();
     expect(text).not.toMatch(/user_id|repo_id|query/);
+  });
+
+  it('record helpers dual-write to the Prometheus registry', async () => {
+    recordChatAnswer({ intent: 'explain', status: 'grounded', blocked: 'false' });
+    recordGuardrailBlock('secrets_leak');
+    recordJudgeVerdict(false);
+    recordCacheEvent('miss');
+    recordChatLatency(0.75);
+
+    const text = await ensureMetrics().metrics();
+    expect(text).toMatch(/codesintler_chat_answers_total\{[^}]*intent="explain"[^}]*\} 1/);
+    expect(text).toMatch(/codesintler_guardrail_blocks_total\{[^}]*gate="secrets_leak"[^}]*\} 1/);
+    expect(text).toMatch(/codesintler_judge_verdicts_total\{[^}]*pass="false"[^}]*\} 1/);
+    expect(text).toMatch(/codesintler_chat_cache_events_total\{[^}]*result="miss"[^}]*\} 1/);
+    expect(text).toMatch(/codesintler_chat_latency_seconds_count( ?\{[^}]*\})? 1/);
   });
 });

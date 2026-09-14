@@ -28,6 +28,7 @@
     "@octokit/rest": "^22.0.1",
     "@octokit/webhooks": "^14.2.0",
     "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.222.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.222.0",
     "@opentelemetry/sdk-node": "^0.222.0",
     "@opentelemetry/sdk-trace": "2.11.0",

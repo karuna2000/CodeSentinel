@@ -4,6 +4,7 @@ import {
   Registry,
   collectDefaultMetrics,
 } from 'prom-client';
+import { metrics as otelMetrics } from '@opentelemetry/api';
 
 /**
  * Prometheus metrics (Phase F).
@@ -61,3 +62,60 @@ export const chatLatencySeconds = new Histogram({
   buckets: [0.1, 0.5, 1, 2.5, 5, 10, 30, 60],
   registers: [registry],
 });
+
+// ── OTel mirrors (S1) ───────────────────────────────────────────────────────
+// Same instruments, second sink: the OTel meter is global-API based, so these
+// are no-ops until the SDK registers a PeriodicExportingMetricReader
+// (telemetry-sdk.ts, pointed at the SigNoz collector). Record helpers below
+// write to BOTH sinks so Prometheus text and OTLP can never diverge.
+
+const otelMeter = otelMetrics.getMeter('codesintler');
+
+const otelChatAnswers = otelMeter.createCounter('codesintler.chat.answers', {
+  description: 'Chat answers served by intent/status/blocked outcome',
+});
+const otelGuardrailBlocks = otelMeter.createCounter('codesintler.guardrail.blocks', {
+  description: 'Guardrail gate failures (answer replaced by fallback)',
+});
+const otelJudgeVerdicts = otelMeter.createCounter('codesintler.judge.verdicts', {
+  description: 'Post-hoc groundedness judge outcomes',
+});
+const otelCacheEvents = otelMeter.createCounter('codesintler.chat.cache.events', {
+  description: 'Answer-cache hits, stores, skips, and store failures',
+});
+const otelChatLatency = otelMeter.createHistogram('codesintler.chat.latency', {
+  description: 'End-to-end chat answer latency in seconds',
+  unit: 's',
+});
+
+export interface AnswerLabels {
+  intent: string;
+  status: string;
+  blocked: string;
+}
+
+export function recordChatAnswer(labels: AnswerLabels): void {
+  chatAnswersTotal.inc(labels);
+  otelChatAnswers.add(1, { ...labels });
+}
+
+export function recordGuardrailBlock(gate: string): void {
+  guardrailBlocksTotal.inc({ gate });
+  otelGuardrailBlocks.add(1, { gate });
+}
+
+export function recordJudgeVerdict(pass: boolean): void {
+  const value = String(pass);
+  judgeVerdictsTotal.inc({ pass: value });
+  otelJudgeVerdicts.add(1, { pass: value });
+}
+
+export function recordCacheEvent(result: string): void {
+  cacheEventsTotal.inc({ result });
+  otelCacheEvents.add(1, { result });
+}
+
+export function recordChatLatency(seconds: number): void {
+  chatLatencySeconds.observe(seconds);
+  otelChatLatency.record(seconds);
+}
