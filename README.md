@@ -128,14 +128,21 @@ git clone https://github.com/your-username/codesentinel.git
 cd codesentinel
 npm install
 
-# Setup Prisma and Postgres
+# Start local Postgres (pgvector, stable port 5433, data in `pgdata` volume)
+docker compose up -d db
+
+# Setup env and database
 cp .env.example .env.local
 # Fill in DATABASE_URL, GITHUB_APP credentials, and NVIDIA_API_KEY
 npx prisma generate
-npx prisma db push
+npm run db:migrate:dev
 
 npm run dev
 ```
+
+Optional local services (all disabled when unset):
+- `REDIS_URL` (e.g. `redis://localhost:6379` via `docker run -d -p 6379:6379 redis:8-alpine`) — enables the chat answer cache. Rate limiting is a separate Upstash REST client and is unaffected.
+- `DEMO_REPO_IDS` (comma-separated repository ids) — enables anonymous grounded Q&A at `/demo`, scoped strictly to those ids.
 
 ---
 
