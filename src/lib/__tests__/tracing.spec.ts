@@ -22,15 +22,23 @@ function fakeTracer(spans: Array<Record<string, unknown>>) {
 }
 
 describe('withSpan', () => {
-  it('does not export the original exception message or stack', async () => {
+  it('redacts secret-bearing messages but preserves ordinary ones for debugging', async () => {
     const { tracer, span } = fakeTracer([]);
-    const error = new Error('Provider echoed private source code');
-    await expect(withSpan('test.private', {}, async () => { throw error; }, tracer as never))
-      .rejects.toBe(error);
+    const leaked = new Error('connect failed with key ghp_abcdefghijklmnopqrstuvwx');
+    await expect(withSpan('test.secret', {}, async () => { throw leaked; }, tracer as never))
+      .rejects.toBe(leaked);
     const exported = JSON.stringify(span.recordException.mock.calls);
-    expect(exported).not.toContain('private source code');
-    expect(span.recordException).toHaveBeenCalledWith({ name: 'Error', message: 'Operation failed' });
-    expect(span.setStatus).toHaveBeenCalledWith({ code: 2, message: 'Operation failed' });
+    expect(exported).not.toContain('ghp_abcdefghijklmnopqrstuvwx');
+    expect(exported).toContain('[REDACTED_SECRET]');
+
+    const { tracer: tracer2, span: span2 } = fakeTracer([]);
+    const plain = new Error('provider timeout after 30s');
+    await expect(withSpan('test.plain', {}, async () => { throw plain; }, tracer2 as never))
+      .rejects.toBe(plain);
+    // Ordinary messages stay: traces must explain failures (spec §53).
+    expect(span2.setStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 2, message: 'provider timeout after 30s' }),
+    );
   });
   it('runs the fn, sets attributes, and always ends the span', async () => {
     const ended: Array<Record<string, unknown>> = [];

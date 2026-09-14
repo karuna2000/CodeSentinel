@@ -27,6 +27,7 @@ import {
   judgeVerdictsTotal,
 } from '@/lib/metrics';
 import { withSpan } from '@/lib/tracing';
+import { observabilityConfig } from '@/lib/observability-config';
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { traceEvent } from '@/lib/observability';
@@ -257,7 +258,9 @@ export async function answerQuestion(opts: AnswerOptions): Promise<AnswerResult>
             messages: formattedMessages,
             temperature: 0.1,
             experimental_telemetry: {
-              isEnabled: true,
+              isEnabled: observabilityConfig().enabled,
+              recordInputs: observabilityConfig().capturePrompts,
+              recordOutputs: observabilityConfig().captureCompletions,
               metadata: {
                 userId: actorId,
                 repoId,
