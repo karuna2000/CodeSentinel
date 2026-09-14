@@ -152,6 +152,31 @@ Optional local services (all disabled when unset):
 - **Self-hosted Langfuse:** `docker/langfuse` (official compose, UI at http://localhost:3010). See `docker-compose.yml` comments. Telemetry is scrubbed before export (`src/lib/observability-sanitize.ts`); set `OBS_CAPTURE_CONTENT=true` explicitly to include raw content (dev only, never production).
 - **Dashboard:** `/admin/observability` (signed-in, scoped to your account) reads the local `trace_events`/`chat_history`/`llm_usage` tables.
 
+## Observability backend: SigNoz (optional)
+
+Self-hosted via Foundry (UI http://localhost:8080, OTLP :4317/:4318):
+
+```bash
+cd docker/signoz
+docker compose -f pours/deployment/compose.yaml -f pours/deployment/compose.override.yaml up -d
+```
+
+Notes:
+- `pours/` is Foundry-generated (gitignored). After any `foundryctl forge` regeneration, re-copy the override back: `cp ../compose.override.yaml pours/deployment/`. The override drops the opamp remote-management flag — without it the query-service overwrites receivers/exporters with `nop` and OTLP goes deaf (verified symptom: connections reset on :4318).
+- App export: set `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318` (spans flow to both Langfuse and SigNoz; service appears as `codesentinel-api`).
+- Dashboards-as-code: `docker/signoz/dashboards/chat-pipeline.json` — import via SigNoz UI (Dashboards → Import JSON); the write API needs a signed-up user first.
+- First-run ClickHouse migrations take a few minutes; ingestion 404s/empty indexes before `signoz_traces` migrations finish are normal.
+
+### Alert thresholds (documented, no live notifiers wired)
+
+| Signal | Hold / investigate | Roll back / page |
+|---|---|---|
+| Chat error rate | 10–100% above baseline | >2× baseline |
+| Chat p95 latency | 20–50% above baseline | >50% above baseline |
+| Guardrail block rate | sudden 2× jump (retrieval or prompt regression?) | sustained 100% (pipeline broken) |
+| Judge fail rate | rising trend over days | — (advisory only, never blocks) |
+| Indexing failures | any single failure | repeated failures on same repo |
+
 ---
 
 ## 📄 License

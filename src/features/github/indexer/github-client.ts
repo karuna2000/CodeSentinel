@@ -8,6 +8,7 @@ import { extractSymbols, ExtractedSymbol } from '@/features/code-intelligence/sy
 import { extractEdges } from '@/features/code-intelligence/edge-builder';
 import { generateEmbedding } from '@/features/context-engine/services/embedding-service';
 import { GraphNodeType, GraphEdgeType } from '@prisma/client';
+import { withSpan } from '@/lib/tracing';
 
 const MAX_EMBEDDING_CHARS = 2000; // keep within bge-small context (~512 tokens)
 
@@ -275,10 +276,18 @@ export async function indexRepository(
   repo: string,
   defaultBranch: string
 ) {
-  const [rawTree, headCommitSha] = await Promise.all([
-    getRepositoryTree(installationId, owner, repo, defaultBranch),
-    getHeadCommitSha(installationId, owner, repo, defaultBranch),
-  ]);
+  // Root span for the indexing pipeline (spec §19) — children below.
+  // Attributes are identifiers + counts only, never file contents.
+  return withSpan('index.repository', { repoId: dbRepoId }, async (rootSpan) => {
+    const [rawTree, headCommitSha] = await withSpan(
+      'index.fetch',
+      { owner, repo, defaultBranch },
+      async () =>
+        Promise.all([
+          getRepositoryTree(installationId, owner, repo, defaultBranch),
+          getHeadCommitSha(installationId, owner, repo, defaultBranch),
+        ]),
+    );
 
   // Filter to indexable blobs (files) only
   const validFiles: FileSeed[] = rawTree
@@ -291,16 +300,24 @@ export async function indexRepository(
     }));
 
   // ── Diff against the previous index ─────────────────────────────────────
-  const existingFiles = await db.file.findMany({
-    where: { repo_id: dbRepoId },
-    select: { id: true, path: true, content_hash: true },
-  });
-  const existingById = new Map(existingFiles.map((f) => [f.path, f.id]));
-  const existingHashes = new Map(existingFiles.map((f) => [f.path, f.content_hash]));
+  const { newPaths, changedPaths, removedPaths } = await withSpan(
+    'index.diff',
+    { fileCount: validFiles.length },
+    async (span) => {
+      const existingFiles = await db.file.findMany({
+        where: { repo_id: dbRepoId },
+        select: { id: true, path: true, content_hash: true },
+      });
+      const existingById = new Map(existingFiles.map((f) => [f.path, f.id]));
+      const existingHashes = new Map(existingFiles.map((f) => [f.path, f.content_hash]));
 
-  const newPaths = validFiles.filter((f) => !existingById.has(f.path));
-  const changedPaths = validFiles.filter((f) => existingById.has(f.path) && existingHashes.get(f.path) !== f.sha);
-  const removedPaths = existingFiles.filter((f) => !validFiles.some((v) => v.path === f.path)).map((f) => f.path);
+      const newP = validFiles.filter((f) => !existingById.has(f.path));
+      const changedP = validFiles.filter((f) => existingById.has(f.path) && existingHashes.get(f.path) !== f.sha);
+      const removedP = existingFiles.filter((f) => !validFiles.some((v) => v.path === f.path)).map((f) => f.path);
+      span.setAttributes({ 'index.new': newP.length, 'index.changed': changedP.length, 'index.removed': removedP.length });
+      return { newPaths: newP, changedPaths: changedP, removedPaths: removedP };
+    },
+  );
 
   // Upsert file rows (additive/new + hash updates), preserving unchanged rows.
   if (newPaths.length > 0) {
@@ -355,11 +372,18 @@ export async function indexRepository(
 
   // 4. Build/refresh repository graph for changed files only
   try {
-    await buildRepositoryGraph(installationId, dbRepoId, owner, repo, [...newPaths, ...changedPaths]);
+    await withSpan(
+      'index.graph',
+      { changedFiles: newPaths.length + changedPaths.length },
+      async () =>
+        buildRepositoryGraph(installationId, dbRepoId, owner, repo, [...newPaths, ...changedPaths]),
+    );
   } catch (err) {
     console.error('Error building repository graph:', err);
     // don't fail the entire indexing process if graph fails
   }
+
+  rootSpan.setAttributes({ fileCount: validFiles.length, commitSha: headCommitSha ?? '' });
 
   return {
     fileCount: validFiles.length,
@@ -370,6 +394,7 @@ export async function indexRepository(
     commitSha: headCommitSha,
     lastSynced: now,
   };
+  });
 }
 
 /**

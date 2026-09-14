@@ -3,6 +3,7 @@ import type { GenerationJob, Prisma } from '@prisma/client';
 import { generateWikiPages } from '@/features/wiki/services/module-summarizer';
 import { generateFlowchart } from '@/features/wiki/services/mermaid-generator';
 import { traceEvent } from '@/lib/observability';
+import { withSpan } from '@/lib/tracing';
 import { logger } from '@/lib/logger';
 import { recordUsage, checkUsageBudget } from '@/lib/llm/metering';
 import { STALE_JOB_MS } from '@/server/jobs/wiki-jobs';
@@ -56,7 +57,9 @@ export async function runWikiJob(jobId: string): Promise<void> {
   const job = await db.generationJob.findUnique({ where: { id: jobId } });
   if (!job) return;
 
-  const start = Date.now();
+  // Worker root span (spec §20) — job.id/type/repo as identifiers only.
+  return withSpan('worker.wiki', { jobId, repoId: job.repo_id }, async () => {
+    const start = Date.now();
 
   // Daily LLM budget gate: a job can sit queued while the user's cap is being
   // consumed elsewhere, so re-check before spending any tokens.
@@ -146,7 +149,8 @@ export async function runWikiJob(jobId: string): Promise<void> {
       error: message,
       timeTakenMs: Date.now() - start,
     });
-  }
+    }
+  });
 }
 
 function resetJobStep(jobId: string): void {
