@@ -1,78 +1,143 @@
 {
-  "title": "CodeSentinel — Chat Pipeline",
-  "description": "Request rate, latency, and cache behavior for the grounded Q&A pipeline. Import via SigNoz UI (Dashboards → Import JSON) or POST /api/v1/dashboards.",
-  "widgets": [
-    {
-      "title": "Chat answer rate by status",
-      "description": "Count of chat.answer spans grouped by status",
-      "query": {
-        "queryType": "builder",
-        "builder": {
-          "queryData": [
-            {
-              "dataSource": "traces",
-              "queryName": "A",
-              "aggregateOperator": "count",
-              "aggregateAttribute": { "key": "", "type": "" },
-              "filters": {
-                "op": "AND",
-                "items": [
-                  { "key": { "key": "name", "type": "tag" }, "op": "=", "value": "chat.answer" }
-                ]
-              },
-              "groupBy": [{ "key": "status.string", "type": "tag" }]
-            }
+  "tags": [{ "key": "domain", "value": "codesintler" }],
+  "spec": {
+    "display": {
+      "name": "CodeSentinel — Chat Pipeline",
+      "description": "Request rate, stage latency, and guardrail blocks for the grounded Q&A pipeline. Import via SigNoz UI (Dashboards → Import JSON)."
+    },
+    "variables": [],
+    "layouts": [
+      {
+        "kind": "Grid",
+        "spec": {
+          "display": { "title": "Overview", "collapse": { "open": true } },
+          "items": [
+            { "x": 0, "y": 0, "width": 6, "height": 6, "content": { "$ref": "#/spec/panels/chat-answer-rate" } },
+            { "x": 6, "y": 0, "width": 6, "height": 6, "content": { "$ref": "#/spec/panels/chat-stage-latency" } },
+            { "x": 0, "y": 6, "width": 12, "height": 6, "content": { "$ref": "#/spec/panels/guardrail-blocks" } }
           ]
         }
       }
-    },
-    {
-      "title": "Stage latency p95 (classify/retrieve/generate/gates)",
-      "description": "p95 duration of pipeline stage spans",
-      "query": {
-        "queryType": "builder",
-        "builder": {
-          "queryData": [
+    ],
+    "panels": {
+      "chat-answer-rate": {
+        "kind": "Panel",
+        "spec": {
+          "display": { "name": "Chat answers by status" },
+          "plugin": {
+            "kind": "signoz/TimeSeriesPanel",
+            "spec": {
+              "visualization": { "timePreference": "global_time" },
+              "legend": { "position": "bottom" }
+            }
+          },
+          "queries": [
             {
-              "dataSource": "traces",
-              "queryName": "A",
-              "aggregateOperator": "p95",
-              "aggregateAttribute": { "key": "durationNano", "type": "" },
-              "filters": {
-                "op": "AND",
-                "items": [
-                  { "key": { "key": "name", "type": "tag" }, "op": "IN", "value": ["chat.classify", "chat.retrieve", "chat.generate", "chat.gates", "chat.judge"] }
-                ]
-              },
-              "groupBy": [{ "key": "name", "type": "tag" }]
+              "kind": "time_series",
+              "spec": {
+                "plugin": {
+                  "kind": "signoz/CompositeQuery",
+                  "spec": {
+                    "queries": [
+                      {
+                        "type": "builder_query",
+                        "spec": {
+                          "name": "A",
+                          "signal": "traces",
+                          "aggregations": [{ "expression": "count()" }],
+                          "filter": { "expression": "name = 'chat.answer'" },
+                          "groupBy": [{ "name": "status.string" }],
+                          "having": { "expression": "" },
+                          "orderBy": [{ "columnName": "count()", "order": "desc" }]
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
             }
           ]
         }
-      }
-    },
-    {
-      "title": "Guardrail blocks by gate",
-      "description": "Count of chat.gates spans where a gate failed (blocked answers)",
-      "query": {
-        "queryType": "builder",
-        "builder": {
-          "queryData": [
+      },
+      "chat-stage-latency": {
+        "kind": "Panel",
+        "spec": {
+          "display": { "name": "Stage latency p95 (classify/retrieve/generate/gates/judge)" },
+          "plugin": {
+            "kind": "signoz/TimeSeriesPanel",
+            "spec": {
+              "visualization": { "timePreference": "global_time" },
+              "legend": { "position": "bottom" },
+              "formatting": { "unit": "ms" }
+            }
+          },
+          "queries": [
             {
-              "dataSource": "traces",
-              "queryName": "A",
-              "aggregateOperator": "count",
-              "aggregateAttribute": { "key": "", "type": "" },
-              "filters": {
-                "op": "AND",
-                "items": [
-                  { "key": { "key": "name", "type": "tag" }, "op": "=", "value": "chat.gates" }
-                ]
-              },
-              "groupBy": []
+              "kind": "time_series",
+              "spec": {
+                "plugin": {
+                  "kind": "signoz/CompositeQuery",
+                  "spec": {
+                    "queries": [
+                      {
+                        "type": "builder_query",
+                        "spec": {
+                          "name": "A",
+                          "signal": "traces",
+                          "aggregations": [{ "expression": "p95(durationNano)/1000000" }],
+                          "filter": { "expression": "name IN ('chat.classify','chat.retrieve','chat.generate','chat.gates','chat.judge')" },
+                          "groupBy": [{ "name": "name" }],
+                          "having": { "expression": "" },
+                          "orderBy": [{ "columnName": "p95(durationNano)/1000000", "order": "desc" }]
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "guardrail-blocks": {
+        "kind": "Panel",
+        "spec": {
+          "display": { "name": "Guardrail blocks (failed gates)" },
+          "plugin": {
+            "kind": "signoz/TimeSeriesPanel",
+            "spec": {
+              "visualization": { "timePreference": "global_time" },
+              "legend": { "position": "bottom" }
+            }
+          },
+          "queries": [
+            {
+              "kind": "time_series",
+              "spec": {
+                "plugin": {
+                  "kind": "signoz/CompositeQuery",
+                  "spec": {
+                    "queries": [
+                      {
+                        "type": "builder_query",
+                        "spec": {
+                          "name": "A",
+                          "signal": "traces",
+                          "aggregations": [{ "expression": "count()" }],
+                          "filter": { "expression": "name = 'chat.gates'" },
+                          "groupBy": [],
+                          "having": { "expression": "" },
+                          "orderBy": [{ "columnName": "count()", "order": "desc" }]
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
             }
           ]
         }
       }
     }
-  ]
+  }
 }
