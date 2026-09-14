@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'crypto';
 import { MAX_UPLOAD_BYTES } from './config';
 
 const MAX_REQUEST_BYTES = MAX_UPLOAD_BYTES + 512 * 1024;
@@ -35,4 +36,12 @@ export function buildRateLimitedResponse(retryAfterMs: number): Response {
       },
     },
   );
+}
+
+/** Constant-time string compare. Different lengths return false without throwing. */
+export function secureCompare(left: string, right: string): boolean {
+  const a = Buffer.from(left);
+  const b = Buffer.from(right);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
 }

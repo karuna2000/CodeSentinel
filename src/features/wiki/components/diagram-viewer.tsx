@@ -24,15 +24,16 @@ export function DiagramViewer({ mermaidSrc, className = '' }: DiagramViewerProps
         const mermaid = (await import('mermaid')).default;
         mermaid.initialize({
           startOnLoad: false,
+          securityLevel: 'strict',
           theme: 'dark',
           themeVariables: {
-            primaryColor: '#2a2a4a',
-            primaryTextColor: '#c8b8f0',
-            primaryBorderColor: '#6a4ecf',
-            lineColor: '#8877cc',
-            secondaryColor: '#1a1a2e',
-            tertiaryColor: '#16213e',
-            edgeLabelBackground: '#1a1a2e',
+            primaryColor: '#15204a',
+            primaryTextColor: '#fbfaf0',
+            primaryBorderColor: '#0d6242',
+            lineColor: '#2f4b7c',
+            secondaryColor: '#0d6242',
+            tertiaryColor: '#101b3e',
+            edgeLabelBackground: '#101b3e',
             fontFamily: 'Inter, system-ui, sans-serif',
           },
         });

@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import type { GenerationJob } from '@prisma/client';
+import { secureCompare } from '@/lib/security';
 
 /** A job stuck in RUNNING for longer than this is assumed crashed and re-claimable. */
 export const STALE_JOB_MS = 30 * 60 * 1000;
@@ -63,7 +64,7 @@ export function verifyDrainAccess(
   isDev: boolean,
 ): boolean {
   if (configuredSecret) {
-    return secretHeader === configuredSecret;
+    return typeof secretHeader === 'string' && secureCompare(secretHeader, configuredSecret);
   }
   return isDev && secretHeader === null;
 }

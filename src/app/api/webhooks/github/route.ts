@@ -37,24 +37,26 @@ export async function POST(request: Request) {
       const installationId = payload.installation?.id;
 
       if (repoId) {
-        const repo = await db.repository.findUnique({
-          where: { github_repo_id: repoId }
+        const repos = await db.repository.findMany({
+          where: { github_repo_id: repoId },
         });
 
-        if (repo && installationId) {
-          indexRepository(
-            installationId,
-            repo.id,
-            repo.owner,
-            repo.name,
-            repo.default_branch || 'main'
-          )
-            .then(() => console.log(`[Webhook] Automatically indexed ${repo.name} after push`))
-            .catch((err) => console.error(`[Webhook] Error indexing ${repo.name}:`, err));
+        if (repos.length > 0 && installationId) {
+          for (const repo of repos) {
+            indexRepository(
+              installationId,
+              repo.id,
+              repo.owner,
+              repo.name,
+              repo.default_branch || 'main',
+            )
+              .then(() => console.log(`[Webhook] Automatically indexed ${repo.name} after push`))
+              .catch((err) => console.error(`[Webhook] Error indexing ${repo.name}:`, err));
+          }
         } else {
           await db.repository.updateMany({
             where: { github_repo_id: repoId },
-            data: { last_synced: null }
+            data: { last_synced: null },
           });
         }
       }

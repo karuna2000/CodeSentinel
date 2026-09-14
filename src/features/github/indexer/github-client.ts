@@ -114,12 +114,25 @@ export async function getAppClient() {
  */
 export async function getInstallationRepositories(installationId: number) {
   const client = await getInstallationClient(installationId);
+  const repositories = [];
+  let page = 1;
 
-  const response = await client.rest.apps.listReposAccessibleToInstallation({
-    per_page: 100,
-  });
+  for (;;) {
+    const response = await client.rest.apps.listReposAccessibleToInstallation({
+      per_page: 100,
+      page,
+    });
+    repositories.push(...response.data.repositories);
+    if (
+      repositories.length >= response.data.total_count ||
+      response.data.repositories.length < 100
+    ) {
+      break;
+    }
+    page += 1;
+  }
 
-  return response.data.repositories;
+  return repositories;
 }
 
 /**

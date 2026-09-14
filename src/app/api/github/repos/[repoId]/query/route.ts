@@ -1,18 +1,14 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { generateObject } from 'ai';
-import { z } from 'zod';
-import { withResilience } from '@/lib/llm/resilience';
 import { retrieveContext } from '@/features/context-engine/services/hybrid-retriever';
 import { formatContextString } from '@/features/context-engine/services/budget-manager';
-import { logger } from '@/lib/logger';
-
-const IntentSchema = z.object({
-  intent: z.enum(['Exploratory', 'Data Flow', 'Locational', 'Schema']),
-  diagram_type: z.enum(['sequence', 'flowchart', 'er', 'none']),
-  search_terms: z.array(z.string()).describe('List of keywords to search for in the codebase'),
-});
+import { db } from '@/lib/db';
+import { checkRateLimit } from '@/lib/rate-limit';
+import { buildRateLimitedResponse } from '@/lib/security';
+import { INPUT_LIMITS } from '@/config/app.config';
+import { classifyIntent } from '@/features/chat/agent/classify-intent';
+import { buildInvestigationPlan } from '@/features/chat/agent/build-investigation-plan';
 
 export async function POST(
   request: Request,
@@ -25,59 +21,55 @@ export async function POST(
   }
 
   const { repoId } = params;
+  const userId = session.user.id;
+
+  const { allowed, retryAfterMs } = await checkRateLimit(`query:${userId}`);
+  if (!allowed) {
+    return buildRateLimitedResponse(retryAfterMs);
+  }
+
+  const repo = await db.repository.findFirst({
+    where: { id: repoId, user_id: userId },
+    select: { id: true },
+  });
+  if (!repo) {
+    return NextResponse.json({ error: 'Repository not found' }, { status: 404 });
+  }
 
   try {
-    const { query } = await request.json();
-    if (!query) {
+    const body = (await request.json()) as { query?: unknown };
+    const query = typeof body.query === 'string' ? body.query : '';
+    if (!query.trim()) {
       return NextResponse.json({ error: 'Missing query' }, { status: 400 });
     }
-
-    // 1. Detect Intent (resilient — same path as chat; no hardcoded model)
-    let intentResult: z.infer<typeof IntentSchema> = {
-      intent: 'Exploratory',
-      diagram_type: 'none',
-      search_terms: query.split(/\s+/).filter((w: string) => w.length > 3),
-    };
-    try {
-      const object = await withResilience(
-        (model) =>
-          generateObject({
-            model,
-            schema: IntentSchema,
-            system: `You are a codebase search assistant. Classify the user's codebase query into an intent
-(Exploratory, Data Flow, Locational, Schema) and extract relevant search_terms (unique nouns, function
-names, file names). Omit stop words.`,
-            prompt: query,
-            temperature: 0,
-          }),
-        'intent-detect',
+    if (query.length > INPUT_LIMITS.queryMaxChars) {
+      return NextResponse.json(
+        { error: `Query too long. Maximum is ${INPUT_LIMITS.queryMaxChars} characters.` },
+        { status: 400 },
       );
-      intentResult = object.object;
-    } catch (err) {
-      logger.warn('[Query]', 'Intent detection failed, using fallback terms', {
-        error: err instanceof Error ? err.message : String(err),
-      });
     }
 
-    // 2. Retrieve Context (RRF + graph traversal, evidence-tagged)
-    const rawContext = await retrieveContext(repoId, intentResult.search_terms, query);
-
-    // 3. Format Context
-    const contextString = formatContextString(rawContext);
+    const classified = await classifyIntent(query, userId, repoId);
+    const plan = buildInvestigationPlan(classified.intent, classified.directionHint);
+    const rawContext = await retrieveContext(repoId, classified.searchTerms, query, {
+      direction: plan.graph.enabled ? plan.graph.direction : 'both',
+      maxHops: plan.graph.enabled ? plan.graph.maxHops : 0,
+      relations: plan.graph.enabled ? plan.graph.relations : null,
+      resultLimit: plan.resultLimit,
+    });
 
     return NextResponse.json({
       success: true,
-      intent: intentResult,
-      context_preview: contextString,
+      intent: classified.intent,
+      context_preview: formatContextString(rawContext),
       nodes_found: rawContext.nodes.length,
       edges_found: rawContext.edges.length,
     });
-
   } catch (error) {
     console.error('Error in Context Engine query:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Internal server error' },
-      { status: 500 }
+      { error: 'Internal server error' },
+      { status: 500 },
     );
   }
 }

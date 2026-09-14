@@ -106,12 +106,12 @@ export default function EmptyChatView({
     const iv = window.setInterval(async () => {
       tries += 1;
       try {
-        const res = await fetch('/api/github/repos');
+        const res = await fetch('/api/github/repos', { method: 'POST' });
         const data = (await res.json()) as { repositories?: unknown };
         if (Array.isArray(data.repositories) && data.repositories.length > 0) {
           window.clearInterval(iv);
           setConnecting(false);
-          router.replace('/dashboard/repos');
+          router.replace('/dashboard');
           return;
         }
       } catch {
@@ -130,7 +130,7 @@ export default function EmptyChatView({
       onBrowseDemo();
       return;
     }
-    router.push('/dashboard/repos');
+    router.push('/dashboard');
   };
 
   return (

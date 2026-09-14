@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { indexRepository } from '@/features/github/indexer/github-client';
+import { resolveCurrentInstallations } from '@/features/github/indexer/installation-resolver';
 
 export async function POST(
   request: Request,
@@ -30,11 +31,14 @@ export async function POST(
       return NextResponse.json({ error: 'Repository not found' }, { status: 404 });
     }
 
-    // 2. Fetch the user's installation ID
-    const installation = await db.githubInstallation.findFirst({
-      where: { user_id: userId },
-      select: { installation_id: true }
-    });
+    // 2. Resolve the user's active installations (GitHub-reconciled so a
+    //    reinstalled app's fresh installation id is used, never a stale one).
+    const installations = await resolveCurrentInstallations(userId);
+
+    const ownerKey = repo.owner.toLowerCase();
+    const installation = installations.find(
+      (inst) => inst.account_name.toLowerCase() === ownerKey,
+    );
 
     if (!installation) {
       return NextResponse.json(
@@ -43,11 +47,9 @@ export async function POST(
       );
     }
 
-    const installationId = Number(installation.installation_id);
-
     // 3. Index repository tree and seed documentation
     const result = await indexRepository(
-      installationId,
+      installation.installation_id,
       repo.id,
       repo.owner,
       repo.name,
@@ -68,7 +70,7 @@ export async function POST(
   } catch (error) {
     console.error('Error indexing repository:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to index repository' },
+      { error: 'Failed to index repository' },
       { status: 500 }
     );
   }

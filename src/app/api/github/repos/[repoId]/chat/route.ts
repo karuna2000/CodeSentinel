@@ -1,15 +1,18 @@
-import { streamText, generateObject } from 'ai';
+import { streamText } from 'ai';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { retrieveContext } from '@/features/context-engine/services/hybrid-retriever';
 import { formatContextString, buildEvidenceIndex } from '@/features/context-engine/services/budget-manager';
+import { classifyIntent } from '@/features/chat/agent/classify-intent';
+import { buildInvestigationPlan } from '@/features/chat/agent/build-investigation-plan';
+import { buildChatSystemPrompt } from '@/features/chat/agent/prompts';
+import type { AnswerStatus, ChatIntent } from '@/features/chat/agent/types';
 import { withResilience } from '@/lib/llm/resilience';
-import { checkUsageBudget, recordUsage, trackStreamUsage, buildUsageExceededResponse } from '@/lib/llm/metering';
+import { checkUsageBudget, trackStreamUsage, buildUsageExceededResponse } from '@/lib/llm/metering';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { buildRateLimitedResponse } from '@/lib/security';
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
 import { logger } from '@/lib/logger';
 import { INPUT_LIMITS } from '@/config/app.config';
 
@@ -21,47 +24,6 @@ interface ChatTurn {
   parts?: Array<{ type: string; text?: string }>;
 }
 
-const IntentSchema = z.object({
-  intent: z.enum(['Exploratory', 'Data Flow', 'Locational', 'Schema']),
-  search_terms: z.array(z.string()).describe('Keywords to search for in the codebase'),
-});
-
-async function detectQueryIntent(query: string, userId: string, repoId: string) {
-  try {
-    const object = await withResilience(
-      (model) =>
-        generateObject({
-          model,
-          schema: IntentSchema,
-          system: `You are a codebase search assistant. Given a developer's question about a codebase,
-extract the most relevant search_terms (unique nouns, function names, file names) to query a code index.
-Omit stop words. Classify the intent type.`,
-          prompt: query,
-          temperature: 0,
-        }),
-      'intent-detect',
-    );
-
-    if (object.usage) {
-      void recordUsage(
-        { inputTokens: object.usage.inputTokens ?? 0, outputTokens: object.usage.outputTokens ?? 0 },
-        { userId, repoId, feature: 'intent-detect' },
-      ).catch((err: unknown) =>
-        logger.error('[RepoChat]', 'Failed to record intent usage', {
-          error: err instanceof Error ? err.message : String(err),
-        }),
-      );
-    }
-
-    return object.object;
-  } catch {
-    return {
-      intent: 'Exploratory' as const,
-      search_terms: query.split(/\s+/).filter(w => w.length > 3),
-    };
-  }
-}
-
 function extractText(msg: { content?: string; parts?: Array<{ type: string; text?: string }> }): string {
   if (msg.parts && msg.parts.length > 0) {
     return msg.parts
@@ -70,6 +32,37 @@ function extractText(msg: { content?: string; parts?: Array<{ type: string; text
       .join('');
   }
   return msg.content ?? '';
+}
+
+/** Maps intent + the top retrieved symbol names to concrete next questions (§44). */
+function buildFollowUps(intent: ChatIntent, topNames: string[], hasEvidence: boolean): string[] {
+  const a = topNames[0] ?? 'this code';
+  const b = topNames[1] ?? null;
+
+  const generic: Array<string | null> = [
+    hasEvidence ? `What could break if I change ${a}?` : null,
+    hasEvidence ? `How does ${a} work end to end?` : null,
+    b ? `How do ${a} and ${b} interact?` : null,
+  ];
+
+  const byIntent: Record<ChatIntent, string[]> = {
+    locate: [`What does ${a} do?`, `Where is ${a} used?`],
+    explain: [`What calls ${a}?`, `Where is ${a} used?`, `What could break if I change ${a}?`],
+    trace_flow: [`Where does ${a} appear first?`, `What happens if ${a} fails?`],
+    architecture: ['How does authentication work end to end?', 'Where is repository indexing implemented?', 'How does wiki generation work?'],
+    dependency: [`Show direct callers of ${a}`, `What could break if I change ${a}?`],
+    impact: [`Which tests cover ${a}?`, `Show direct callers of ${a}`],
+    debug: [`Where does ${a} check for errors?`, `What returns an error in this repo?`],
+    compare: [`What does ${a} do?`, b ? `How do ${a} and ${b} differ?` : `What does ${a} depend on?`],
+  };
+
+  return [...new Set(byIntent[intent].concat(generic.filter((x): x is string => Boolean(x))))].slice(0, 4);
+}
+
+function computeStatus(evidenceCount: number): AnswerStatus {
+  if (evidenceCount === 0) return 'not_found';
+  if (evidenceCount <= 1) return 'limited_evidence';
+  return 'grounded';
 }
 
 export async function POST(
@@ -85,16 +78,15 @@ export async function POST(
   const { repoId } = params;
   const userId = session.user.id;
 
-  // Rate limit: 10 chat requests per minute per user
   const { allowed, retryAfterMs } = await checkRateLimit(`chat:${userId}`);
   if (!allowed) {
-    logger.warn('[RepoChat]', `Rate limit hit for user ${userId}`);
+    logger.warn('[Chat]', `Rate limit hit for user ${userId}`);
     return buildRateLimitedResponse(retryAfterMs);
   }
 
   const budget = await checkUsageBudget(userId);
   if (!budget.allowed) {
-    logger.warn('[RepoChat]', `Usage cap hit for user ${userId}`, {
+    logger.warn('[Chat]', `Usage cap hit for user ${userId}`, {
       usedTokens: budget.usedTokens,
       capTokens: budget.capTokens,
     });
@@ -109,6 +101,8 @@ export async function POST(
   if (!repo) {
     return NextResponse.json({ error: 'Repository not found' }, { status: 404 });
   }
+
+  const startedAt = performance.now();
 
   try {
     const { messages } = (await request.json()) as { messages?: ChatTurn[] };
@@ -127,7 +121,6 @@ export async function POST(
       return NextResponse.json({ error: 'Empty message' }, { status: 400 });
     }
 
-    // Enforce max message length
     if (query.length > INPUT_LIMITS.chatMessageMaxChars) {
       return NextResponse.json(
         { error: `Message too long. Maximum is ${INPUT_LIMITS.chatMessageMaxChars} characters.` },
@@ -135,38 +128,55 @@ export async function POST(
       );
     }
 
-    // 1. Detect Intent → search terms
-    const intentResult = await detectQueryIntent(query, userId, repoId);
+    // ── 1. Classify intent (deterministic hints + model fallback, safe default) ──
+    const classified = await classifyIntent(query, userId, repoId);
+    const plan = buildInvestigationPlan(classified.intent, classified.directionHint);
 
-    // 2. Retrieve Context from DB (BM25 + semantic + graph traversal)
-    const rawContext = await retrieveContext(repoId, intentResult.search_terms, query);
+    // ── 2. Retrieval — plan-aware traversal (direction + relations + depth) ──
+    const rawContext = await retrieveContext(repoId, classified.searchTerms, query, {
+      direction: plan.graph.enabled ? plan.graph.direction : 'both',
+      maxHops: plan.graph.enabled ? plan.graph.maxHops : 0,
+      relations: plan.graph.enabled ? plan.graph.relations : null,
+      resultLimit: plan.resultLimit,
+    });
 
-    // 3. Format Context into a prompt-friendly string
+    // ── 3. Ground the answer: status + evidence index + prompt ──
+    const evidenceCount = rawContext.nodes.length;
+    const status = computeStatus(evidenceCount);
     const contextString = formatContextString(rawContext);
+    const evidenceIndex = buildEvidenceIndex(rawContext.nodes);
+    const citations = evidenceIndex.map((ev, idx) => ({
+      id: ev.id,
+      nodeId: rawContext.nodes[idx]?.id ?? ev.id,
+      label: ev.filePath
+        ? ev.startLine != null && ev.endLine != null
+          ? `${ev.filePath}:${ev.startLine}-${ev.endLine}`
+          : ev.filePath
+        : ev.nodeName,
+      filePath: ev.filePath,
+      nodeName: ev.nodeName,
+      startLine: ev.startLine,
+      endLine: ev.endLine,
+    }));
+    const followUps = buildFollowUps(
+      classified.intent,
+      rawContext.nodes.filter((n) => n.type !== 'FILE').map((n) => n.name).slice(0, 2),
+      evidenceCount > 0
+    );
 
-    // 4. Build System Prompt
-    const systemPrompt = `You are an expert AI assistant helping a developer understand their codebase.
-Use ONLY the following architectural context and code snippets to answer their question.
-If the answer is not in the context, say so clearly, then provide a best-effort logical explanation.
+    const systemPrompt = buildChatSystemPrompt(classified.intent, contextString);
 
-${contextString}
-
-When answering:
-1. Reference specific file paths and function names from the context.
-2. When referring to specific code from the context, cite its evidence tag inline (e.g. [E3]) so the developer can jump to the exact source.
-3. Include short code examples where helpful.
-4. Be concise but thorough.`;
-
-    // 5. Normalise all messages → {role, content} for the LLM
+    // ── 4. Normalise conversation → {role, content} for the LLM ──
     const formattedMessages = messages
       .filter((m) => m.role === 'user' || m.role === 'assistant')
       .map((m) => ({
         role: m.role as 'user' | 'assistant',
         content: extractText(m),
       }))
-      .filter((m) => m.content.trim().length > 0);
+      .filter((m) => m.content.trim().length > 0)
+      .slice(-INPUT_LIMITS.chatHistoryMaxTurns);
 
-    // 6. Stream response — same fallback/backoff policy as review & chat engines
+    // ── 5. Stream — same fallback/backoff policy as review & wiki engines ──
     const result = await withResilience(
       (model) =>
         streamText({
@@ -179,35 +189,22 @@ When answering:
             metadata: {
               userId,
               repoId,
-              intent: intentResult.intent,
-              nodesRetrieved: rawContext.nodes.length,
+              intent: classified.intent,
+              status,
+              nodesRetrieved: evidenceCount,
+              lexicalHits: rawContext.stats?.lexicalHits ?? 0,
+              semanticHits: rawContext.stats?.semanticHits ?? 0,
+              graphExpanded: rawContext.stats?.graphExpanded ?? 0,
             },
           },
         }),
       'chat',
     );
 
-    // 7. Grounded evidence → structured citation header ([E*] → file:line)
-    //    matching the evidence tags embedded in the system prompt.
-    const citations = buildEvidenceIndex(rawContext.nodes).map((ev) => ({
-      id: ev.id,
-      label: ev.filePath
-        ? ev.startLine != null && ev.endLine != null
-          ? `${ev.filePath}:${ev.startLine}-${ev.endLine}`
-          : ev.filePath
-        : ev.nodeName,
-      filePath: ev.filePath,
-      nodeName: ev.nodeName,
-      startLine: ev.startLine,
-      endLine: ev.endLine,
-    }));
-
     trackStreamUsage(result.usage, { userId, repoId, feature: 'chat' });
 
-    // 7b. Wrap the text stream so lazy provider failures (which only surface
-    //     mid-stream, after the 200 headers are already sent) are visibly
-    //     reported to the client instead of a silent truncated 200. The sentinel
-    //     is stripped from the assistant message by the client and shown as an error.
+    // ── 6. Wrap stream so lazy provider failures surface mid-stream (never a
+    //        silent truncated 200). Sentinel stripped by the client. ──
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
@@ -216,25 +213,45 @@ When answering:
             controller.enqueue(encoder.encode(chunk));
           }
         } catch (err) {
-          const message = err instanceof Error ? err.message : 'Stream generation failed';
-          controller.enqueue(encoder.encode(`\n\n[__STREAM_ERROR__]${message}`));
+          console.error('[Chat] stream error:', err);
+          controller.enqueue(encoder.encode(`\n\n[__STREAM_ERROR__]There was a problem finishing the answer. Please try again.`));
         } finally {
           controller.close();
         }
       },
+      cancel() {
+        // Provider stream pulled to completion already; nothing to abort.
+      },
+    });
+
+    logger.info('[Chat]', 'answered', {
+      userId,
+      repoId,
+      intent: classified.intent,
+      status,
+      evidenceCount,
+      stats: rawContext.stats,
+      retrievalMs: Math.round(performance.now() - startedAt),
     });
 
     return new Response(stream, {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
-        'x-citations': Buffer.from(JSON.stringify(citations)).toString('base64'),
+        'x-chat-meta': Buffer.from(
+          JSON.stringify({
+            intent: classified.intent,
+            status,
+            evidence: citations,
+            followUps,
+            stats: rawContext.stats ?? { lexicalHits: 0, semanticHits: 0, graphExpanded: 0 },
+          })
+        ).toString('base64'),
       },
     });
-
   } catch (error) {
-    logger.error('[RepoChat]', 'Chat request failed', { error: error instanceof Error ? error.message : String(error), repoId });
+    logger.error('[Chat]', 'Chat request failed', { error: error instanceof Error ? error.message : String(error), repoId });
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Internal server error' },
+      { error: 'There was a problem answering your question. Please try again.' },
       { status: 500 }
     );
   }

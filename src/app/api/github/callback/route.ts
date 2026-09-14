@@ -1,60 +1,53 @@
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { db } from '@/lib/db';
-import { getAppClient } from '@/features/github/indexer/github-client';
+import { claimGithubInstallation, InstallationClaimError } from '@/features/github/indexer/installation-resolver';
+import { INSTALL_STATE_COOKIE } from '@/features/github/indexer/install-state';
+import { secureCompare } from '@/lib/security';
+
+function redirectWithError(request: Request, code: string) {
+  return NextResponse.redirect(new URL(`/?error=${code}`, request.url));
+}
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const installationIdStr = url.searchParams.get('installation_id');
-  
+  const state = url.searchParams.get('state');
+
   if (!installationIdStr) {
-    return NextResponse.redirect(new URL('/?error=missing_installation_id', request.url));
+    return redirectWithError(request, 'missing_installation_id');
   }
 
   const installationId = parseInt(installationIdStr, 10);
-  
-  // 1. Ensure user is logged in
+  if (!Number.isFinite(installationId) || installationId <= 0) {
+    return redirectWithError(request, 'invalid_installation_id');
+  }
+
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
-    // If not logged in, we could stash the installation_id in a cookie and redirect to login,
-    // but for simplicity, we require them to be logged in first.
-    return NextResponse.redirect(new URL(`/auth/signin?callbackUrl=${encodeURIComponent(request.url)}`, request.url));
+    return NextResponse.redirect(
+      new URL(`/auth/signin?callbackUrl=${encodeURIComponent(request.url)}`, request.url),
+    );
   }
-  
-  const userId = session.user.id;
+
+  const cookieStore = await cookies();
+  const expectedState = cookieStore.get(INSTALL_STATE_COOKIE)?.value;
+  if (!state || !expectedState || !secureCompare(state, expectedState)) {
+    return redirectWithError(request, 'invalid_install_state');
+  }
 
   try {
-    // 2. Verify the installation exists and get metadata via our GitHub App
-    const appClient = await getAppClient();
-    const { data: installation } = await appClient.rest.apps.getInstallation({
-      installation_id: installationId,
-    });
-
-    const account = installation.account;
-    const accountName = (account && 'login' in account ? account.login : account?.name) || 'Unknown Account';
-
-    // 3. Save to database
-    try {
-      await db.githubInstallation.upsert({
-        where: { installation_id: installationId },
-        update: { user_id: userId, account_name: accountName },
-        create: {
-          installation_id: installationId,
-          user_id: userId,
-          account_name: accountName,
-        }
-      });
-    } catch (error) {
-      console.error('Failed to save GitHub installation:', error);
-      return NextResponse.redirect(new URL('/?error=db_save_failed', request.url));
-    }
-
-    // 4. Redirect to the repository browser dashboard
-    return NextResponse.redirect(new URL('/dashboard/repos', request.url));
-
+    await claimGithubInstallation(session.user.id, installationId);
   } catch (error) {
+    if (error instanceof InstallationClaimError) {
+      return redirectWithError(request, `github_claim_${error.code}`);
+    }
     console.error('Error handling GitHub App callback:', error);
-    return NextResponse.redirect(new URL('/?error=github_callback_failed', request.url));
+    return redirectWithError(request, 'github_callback_failed');
   }
+
+  const response = NextResponse.redirect(new URL('/dashboard', request.url));
+  response.cookies.set(INSTALL_STATE_COOKIE, '', { path: '/', maxAge: 0 });
+  return response;
 }

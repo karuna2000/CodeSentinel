@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { generateEmbedding } from './embedding-service';
-import { GraphNode, GraphEdge } from '@prisma/client';
+import { GraphNode, GraphEdge, GraphEdgeType } from '@prisma/client';
 
 // A retrieved node plus the source file path it lives in (resolved from
 // graph_nodes.file_id → files.path). FILE nodes carry their own path (name).
@@ -11,6 +11,27 @@ export interface RetrievedContext {
   edges: GraphEdge[];
   readme?: string;
   filePaths?: string[];
+  /** Live retrieval metrics (§49) — how many lexical/semantic/graph hits fed the evidence. */
+  stats?: RetrievalStats;
+}
+
+export interface RetrievalStats {
+  lexicalHits: number;
+  semanticHits: number;
+  graphExpanded: number;
+}
+
+/**
+ * Intent-aware traversal plan. When provided, the graph expansion runs in a
+ * specific direction and only over the listed edge relations with a bounded
+ * number of hops (§14, §17). When omitted, legacy behavior is preserved
+ * (both directions, all meaningful edge types, 2 hops).
+ */
+export interface GraphTraversalPlan {
+  direction?: 'incoming' | 'outgoing' | 'both';
+  maxHops?: number;
+  relations?: GraphEdgeType[] | null;
+  resultLimit?: number;
 }
 
 const RRF_K = 60;
@@ -39,10 +60,16 @@ function rrf(rank: number): number {
 export async function retrieveContext(
   repoId: string,
   searchTerms: string[],
-  query: string
+  query: string,
+  plan?: GraphTraversalPlan
 ): Promise<RetrievedContext> {
   const nodesById = new Map<string, GraphNode>();
   const fusedScores = new Map<string, number>();
+  const direction = plan?.direction ?? 'both';
+  const maxHops = plan ? plan.maxHops ?? 1 : 2;
+  const relations = plan?.relations?.length ? plan.relations : null;
+  const resultLimit = plan?.resultLimit ?? MAX_TOTAL_NODES;
+  const stats: RetrievalStats = { lexicalHits: 0, semanticHits: 0, graphExpanded: 0 };
 
   // ── 1. Keyword / Lexical Search (weighted Postgres FTS + identifier substring) ─
   if (searchTerms.length > 0) {
@@ -81,6 +108,7 @@ export async function retrieveContext(
       nodesById.set(node.id, node);
       fusedScores.set(node.id, (fusedScores.get(node.id) ?? 0) + rrf(idx + 1));
     });
+    stats.lexicalHits = rankedKeyword.length;
   }
 
   // ── 2. Semantic Search (pgvector cosine) ──────────────────────────────
@@ -101,6 +129,7 @@ export async function retrieveContext(
       nodesById.set(node.id, node);
       fusedScores.set(node.id, (fusedScores.get(node.id) ?? 0) + rrf(idx + 1));
     });
+    stats.semanticHits = rankedSemantic.length;
   } catch (err) {
     console.error('Semantic search failed:', err);
   }
@@ -137,6 +166,7 @@ export async function retrieveContext(
     const hop1Edges = await db.graphEdge.findMany({
       where: {
         repo_id: repoId,
+        ...(relations ? { type: { in: relations } } : {}),
         OR: [{ source_node_id: { in: seedArr } }, { target_node_id: { in: seedArr } }],
       },
     });
@@ -147,46 +177,90 @@ export async function retrieveContext(
       if (weight === 0) continue;
       recordEdge(edge);
 
-      if (seedIds.has(edge.source_node_id)) {
-        scoreNeighbor(edge.target_node_id, weight);
-        if (weight >= HOP2_WEIGHT_THRESHOLD) hop1Strong.add(edge.target_node_id);
-      }
-      if (seedIds.has(edge.target_node_id)) {
-        scoreNeighbor(edge.source_node_id, weight);
-        if (weight >= HOP2_WEIGHT_THRESHOLD) hop1Strong.add(edge.source_node_id);
+      const seedIsSource = seedIds.has(edge.source_node_id);
+      const seedIsTarget = seedIds.has(edge.target_node_id);
+      const strong = weight >= HOP2_WEIGHT_THRESHOLD;
+
+      // Direction-aware neighbor promotion (§14): impact/dependency queries
+      // only pull neighbors on the requested side of the edge.
+      if (direction === 'incoming') {
+        // Incoming = edges pointed at the seed → promote callers/importers.
+        if (seedIsTarget) {
+          scoreNeighbor(edge.source_node_id, weight);
+          if (strong) hop1Strong.add(edge.source_node_id);
+        }
+      } else if (direction === 'outgoing') {
+        // Outgoing = edges leaving the seed → promote callees/imports.
+        if (seedIsSource) {
+          scoreNeighbor(edge.target_node_id, weight);
+          if (strong) hop1Strong.add(edge.target_node_id);
+        }
+      } else {
+        if (seedIsSource) {
+          scoreNeighbor(edge.target_node_id, weight);
+          if (strong) hop1Strong.add(edge.target_node_id);
+        }
+        if (seedIsTarget) {
+          scoreNeighbor(edge.source_node_id, weight);
+          if (strong) hop1Strong.add(edge.source_node_id);
+        }
       }
     }
 
-    if (hop1Strong.size > 0) {
-      const hop2Edges = await db.graphEdge.findMany({
-        where: {
-          repo_id: repoId,
-          type: 'IMPORTS',
-          OR: [
-            { source_node_id: { in: Array.from(hop1Strong) } },
-            { target_node_id: { in: Array.from(hop1Strong) } },
-          ],
-        },
-      });
+    if (maxHops >= 2 && hop1Strong.size > 0) {
+      // Hop 2 traverses IMPORTS only. When the plan constrains relations to a
+      // set that excludes IMPORTS, honor the plan by skipping hop 2 entirely.
+      const allowHop2 = !relations || relations.includes(GraphEdgeType.IMPORTS);
+      if (!allowHop2) {
+        stats.graphExpanded = neighborIds.size;
+      } else {
+        const hop2Edges = await db.graphEdge.findMany({
+          where: {
+            repo_id: repoId,
+            type: 'IMPORTS',
+            OR: [
+              { source_node_id: { in: Array.from(hop1Strong) } },
+              { target_node_id: { in: Array.from(hop1Strong) } },
+            ],
+          },
+        });
 
       for (const edge of hop2Edges) {
-        const weight = EDGE_TYPE_WEIGHTS.IMPORTS * 0.5;
-        if (hop1Strong.has(edge.source_node_id)) {
-          recordEdge(edge);
-          scoreNeighbor(edge.target_node_id, weight);
-        }
-        if (hop1Strong.has(edge.target_node_id)) {
-          recordEdge(edge);
-          scoreNeighbor(edge.source_node_id, weight);
+          const weight = EDGE_TYPE_WEIGHTS.IMPORTS * 0.5;
+          const strongAsSource = hop1Strong.has(edge.source_node_id);
+          const strongAsTarget = hop1Strong.has(edge.target_node_id);
+
+          if (direction === 'incoming') {
+            if (strongAsTarget) {
+              recordEdge(edge);
+              scoreNeighbor(edge.source_node_id, weight);
+            }
+          } else if (direction === 'outgoing') {
+            if (strongAsSource) {
+              recordEdge(edge);
+              scoreNeighbor(edge.target_node_id, weight);
+            }
+          } else {
+            if (strongAsSource) {
+              recordEdge(edge);
+              scoreNeighbor(edge.target_node_id, weight);
+            }
+            if (strongAsTarget) {
+              recordEdge(edge);
+              scoreNeighbor(edge.source_node_id, weight);
+            }
+          }
         }
       }
     }
+
+    stats.graphExpanded = neighborIds.size;
 
     // Fetch traversal-discovered neighbor rows once, then filter which
     // recorded relationships actually link nodes that made the final list.
     if (neighborIds.size > 0) {
       const rows = await db.graphNode.findMany({
-        where: { id: { in: Array.from(neighborIds) } },
+        where: { repo_id: repoId, id: { in: Array.from(neighborIds) } },
       });
       for (const node of rows) nodesById.set(node.id, node);
     }
@@ -196,7 +270,7 @@ export async function retrieveContext(
   const primaryNodes = scoredCandidates
     .map((c) => nodesById.get(c.id))
     .filter((n): n is GraphNode => Boolean(n))
-    .slice(0, MAX_TOTAL_NODES);
+    .slice(0, resultLimit);
 
   const promotedNeighbors = Array.from(traversalScores.entries())
     .sort((a, b) => b[1] - a[1])
@@ -207,7 +281,7 @@ export async function retrieveContext(
   const finalNodes: RetrievedNode[] = [
     ...primaryNodes,
     ...promotedNeighbors,
-  ].slice(0, MAX_TOTAL_NODES) as RetrievedNode[];
+  ].slice(0, resultLimit) as RetrievedNode[];
 
   // Resolve each node's source file (for grounded evidence citations).
   if (finalNodes.length > 0) {
@@ -238,6 +312,7 @@ export async function retrieveContext(
   const result: RetrievedContext = {
     nodes: finalNodes,
     edges: finalEdges,
+    stats,
   };
 
   // ── 6. README + file-tree fallback — for broad/project-level queries and

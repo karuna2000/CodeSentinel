@@ -21,7 +21,7 @@ model GithubInstallation {
 
 model Repository {
   id             String    @id @default(uuid())
-  github_repo_id BigInt    @unique
+  github_repo_id BigInt
   name           String
   owner          String
   default_branch String    @default("main")
@@ -42,6 +42,8 @@ model Repository {
   wiki_pages  WikiPage[]
   diagrams    Diagram[]
 
+  @@unique([user_id, github_repo_id])
+  @@index([github_repo_id])
   @@map("repositories")
 }
 

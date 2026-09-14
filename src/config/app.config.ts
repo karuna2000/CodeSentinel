@@ -10,5 +10,7 @@ export const WIKI_RATE_LIMIT = {
 
 export const INPUT_LIMITS = {
   chatMessageMaxChars: 4_000,
+  chatHistoryMaxTurns: 16,
+  queryMaxChars: 4_000,
   wikiAnswerMaxChars: 10_000,
 } as const;

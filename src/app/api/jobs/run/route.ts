@@ -31,6 +31,6 @@ export async function POST(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.error('[Jobs Run]', 'Job drain failed', { error: message });
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: 'Job processing failed' }, { status: 500 });
   }
 }

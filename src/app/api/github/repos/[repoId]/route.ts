@@ -34,11 +34,10 @@ export async function DELETE(
     return NextResponse.json({ error: 'Repository not found' }, { status: 404 });
   }
 
-  // No FK relation — remove task state explicitly (wiki/chat jobs for this repo).
-  await db.generationJob.deleteMany({ where: { repo_id: repoId } });
-
-  // Cascades: files -> graph_nodes -> graph_edges, wiki_pages, diagrams.
-  await db.repository.delete({ where: { id: repoId } });
+  await db.$transaction(async (tx) => {
+    await tx.generationJob.deleteMany({ where: { repo_id: repoId } });
+    await tx.repository.delete({ where: { id: repoId, user_id: userId } });
+  });
 
   logger.info('[Repo Delete]', `Removed ${repo.owner}/${repo.name}`, { userId, repoId });
   traceEvent('repository_removed', { userId, repoId, repo: `${repo.owner}/${repo.name}` });
