@@ -10,6 +10,8 @@
  *   of defense; primary defense is never capturing content by default).
  */
 
+import { observabilityConfig } from './observability-config';
+
 const BLOCKED_KEY_PATTERNS = [
   /authorization/i,
   /cookie/i,
@@ -36,6 +38,9 @@ const CONTENT_KEYS = [
   'answer',
   'query',
   'text',
+  'code_snippet',
+  'signature',
+  'documentation',
 ];
 
 const SECRET_VALUE_PATTERNS = [
@@ -45,6 +50,8 @@ const SECRET_VALUE_PATTERNS = [
   /\bxox[abpr]-([A-Za-z0-9-]{10,})\b/,
   /\bsk-(ant|proj|live)-[A-Za-z0-9-_]{10,}\b/,
   /\bBearer\s+[A-Za-z0-9\-._~+/]+/i,
+  /\b(?:postgres(?:ql)?|redis|https?):\/\/[^\s/@]+:[^\s/@]+@/i,
+  /\b(?:api[_-]?key|password|secret|token)\s*[:=]\s*['"]?\S{8,}/i,
 ];
 
 export interface SanitizeOptions {
@@ -53,8 +60,10 @@ export interface SanitizeOptions {
 }
 
 function isContentKey(key: string): boolean {
-  const normalized = key.toLowerCase();
-  return CONTENT_KEYS.some((k) => normalized === k || normalized.endsWith(`_${k}`));
+  const normalized = key.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase();
+  return CONTENT_KEYS.some((k) => normalized === k || normalized.endsWith(`_${k}`) ||
+    normalized.endsWith(`.${k}`)) || /^(ai\.prompt|gen_ai\.(input|output)\.messages)/.test(normalized) ||
+    /^langfuse\.(observation|trace)\.(input|output)$/.test(normalized);
 }
 
 /** Deep-scrub a metadata object for telemetry export. Never throws. */
@@ -67,7 +76,13 @@ export function sanitizeTelemetryMetadata(
   const out: Record<string, unknown> = {};
   try {
     for (const [key, value] of Object.entries(input ?? {})) {
-      if (BLOCKED_KEY_PATTERNS.some((re) => re.test(key))) continue;
+      const normalized = key.replace(/([a-z])([A-Z])/g, '$1_$2');
+      if (BLOCKED_KEY_PATTERNS.some((re) => re.test(normalized))) continue;
+      // Upstream errors can echo arbitrary source code, not just recognizable secrets.
+      if (/^exception\.(message|stacktrace)$/.test(key)) continue;
+      const config = observabilityConfig();
+      if (/^(ai\.prompt|gen_ai\.input\.messages|langfuse\.(observation|trace)\.input)/.test(key) && !config.capturePrompts) continue;
+      if (/^(ai\.response\.(text|toolCalls)|gen_ai\.output\.messages|langfuse\.(observation|trace)\.output)/.test(key) && !config.captureCompletions) continue;
       if (!allowContent && isContentKey(key)) continue;
       out[key] = scrubValue(value, allowContent);
     }
@@ -103,4 +118,10 @@ export function sanitizeError(err: unknown): string {
     if (re.test(message)) return '[REDACTED_SECRET]';
   }
   return message.slice(0, 500);
+}
+
+/** Only allow operational headers; arbitrary custom headers can contain secrets. */
+export function sanitizeHeaders(headers: Record<string, unknown>): Record<string, unknown> {
+  return sanitizeTelemetryMetadata(Object.fromEntries(Object.entries(headers)
+    .filter(([key]) => ['content-type', 'content-length', 'traceparent'].includes(key.toLowerCase()))));
 }

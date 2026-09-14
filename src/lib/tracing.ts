@@ -1,5 +1,6 @@
-import { trace, type Attributes, type Span, type Tracer } from '@opentelemetry/api';
-import { sanitizeError, sanitizeTelemetryMetadata } from '@/lib/observability-sanitize';
+import { trace, INVALID_SPAN_CONTEXT, type Attributes, type Span, type Tracer } from '@opentelemetry/api';
+import { sanitizeError } from '@/lib/observability-sanitize';
+import { sanitizeTelemetryMetadata } from '@/lib/observability-sanitize';
 
 /**
  * Thin OpenTelemetry helper (Phase F).
@@ -13,6 +14,8 @@ import { sanitizeError, sanitizeTelemetryMetadata } from '@/lib/observability-sa
  * answers, and user ids stay out of vendor traces. Counts, intents, and
  * latencies are fine.
  */
+
+import { observabilityConfig } from './observability-config';
 
 const TRACER_NAME = 'codesintler';
 
@@ -34,46 +37,21 @@ export function markOtelRegistered(): void {
  * vitest, never without export credentials. Resolves true when an SDK is up.
  */
 export function ensureOtel(): Promise<boolean> {
+  const config = observabilityConfig();
+  if (!config.enabled) return Promise.resolve(false);
   if (hookRegistered) return Promise.resolve(true);
   if (initPromise) return initPromise;
-  if (
-    process.env.NEXT_RUNTIME === 'edge' ||
-    process.env.VITEST_WORKER_ID ||
-    (!process.env.LANGFUSE_PUBLIC_KEY &&
-      !process.env.OTEL_EXPORTER_OTLP_ENDPOINT)
-  ) {
-    return Promise.resolve(false);
-  }
+  if (process.env.NEXT_RUNTIME === 'edge' || process.env.VITEST_WORKER_ID ||
+      (!config.langfuse.enabled && !config.traceEndpoint)) return Promise.resolve(false);
   initPromise = (async () => {
     try {
-      const [{ NodeSDK }, { LangfuseSpanProcessor }] = await Promise.all([
-        import('@opentelemetry/sdk-node'),
-        import('@langfuse/otel'),
-      ]);
-      const explicitEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || '';
-      if (explicitEndpoint) {
-        const { OTLPTraceExporter } = await import('@opentelemetry/exporter-trace-otlp-http');
-        const sdk = new NodeSDK({
-          serviceName: 'codesintler',
-          traceExporter: new OTLPTraceExporter({ url: explicitEndpoint }),
-        });
-        sdk.start();
-      } else {
-        const sdk = new NodeSDK({
-          serviceName: 'codesintler',
-          spanProcessors: [
-            new LangfuseSpanProcessor({
-              publicKey: process.env.LANGFUSE_PUBLIC_KEY || '',
-              secretKey: process.env.LANGFUSE_SECRET_KEY || '',
-              baseUrl: process.env.LANGFUSE_HOST || 'https://cloud.langfuse.com',
-              shouldExportSpan: () => true,
-            }),
-          ],
-        });
-        sdk.start();
-      }
+      const { createTelemetrySDK } = await import('./telemetry-sdk');
+      const sdk = await createTelemetrySDK(config);
+      sdk.start();
+      shutdownSDK = () => sdk.shutdown();
       hookRegistered = true;
-      console.log('[OTel] SDK registered (lazy init), exporting spans to Langfuse');
+      process.once('SIGTERM', shutdownTelemetry);
+      process.once('SIGINT', shutdownTelemetry);
       return true;
     } catch {
       initPromise = null;
@@ -81,6 +59,18 @@ export function ensureOtel(): Promise<boolean> {
     }
   })();
   return initPromise;
+}
+
+let shutdownSDK: (() => Promise<void>) | undefined;
+export async function shutdownTelemetry(): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      shutdownSDK?.(),
+      new Promise<void>(resolve => { timer = setTimeout(resolve, 2000); timer.unref(); }),
+    ]);
+  } catch { /* Never prevent application shutdown. */ }
+  finally { if (timer) clearTimeout(timer); }
 }
 
 /**
@@ -93,21 +83,36 @@ export async function withSpan<T>(
   fn: (span: Span) => Promise<T>,
   tracer?: Tracer,
 ): Promise<T> {
-  // Lazy SDK startup: covers runtimes where the Next instrumentation hook
-  // doesn't run. No-op when export isn't configured (local dev default).
   await ensureOtel();
+  const noop = trace.wrapSpanContext(INVALID_SPAN_CONTEXT);
+  if (!observabilityConfig().enabled) return fn(noop);
   const activeTracer = tracer ?? getTracer();
-  return activeTracer.startActiveSpan(name, async (span) => {
-    try {
-      // Scrubbed at the single export choke point (spec §32).
-      span.setAttributes(sanitizeTelemetryMetadata(attrs) as Attributes);
-      return await fn(span);
-    } catch (err) {
-      span.recordException(err as Error);
-      span.setStatus({ code: 2, message: sanitizeError(err) });
-      throw err;
-    } finally {
-      span.end();
-    }
-  });
+  let entered = false;
+  try {
+    return await activeTracer.startActiveSpan(name, async (span) => {
+      entered = true;
+      const safeSpan = new Proxy(span, {
+        get(target, key) {
+          const value = Reflect.get(target, key);
+          if (typeof value !== 'function') return value;
+          return (...args: unknown[]) => {
+            try { return value.apply(target, args); } catch { return undefined; }
+          };
+        },
+      });
+      try {
+        safeSpan.setAttributes(sanitizeTelemetryMetadata(attrs) as Attributes);
+        return await fn(safeSpan);
+      } catch (err) {
+        safeSpan.recordException({ name: 'Error', message: sanitizeError(err) });
+        safeSpan.setStatus({ code: 2, message: sanitizeError(err) });
+        throw err;
+      } finally {
+        safeSpan.end();
+      }
+    });
+  } catch (err) {
+    if (entered) throw err;
+    return fn(noop);
+  }
 }

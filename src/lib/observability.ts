@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import { getTracer } from '@/lib/tracing';
 import { sanitizeTelemetryMetadata } from '@/lib/observability-sanitize';
+import { observabilityConfig } from './observability-config';
 
 type TraceMetadata = Record<string, unknown>;
 
@@ -41,6 +42,7 @@ function toSpanAttributes(meta: TraceMetadata): Attributes {
  * Fire-and-forget — tracing must never fail or slow the caller.
  */
 export function traceEvent(name: string, metadata?: TraceMetadata): void {
+  if (!observabilityConfig().enabled) return;
   // Sanitize once: both sinks below receive only scrubbed data.
   const meta = sanitizeTelemetryMetadata(metadata ?? {});
 

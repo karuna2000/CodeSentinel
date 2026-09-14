@@ -22,6 +22,16 @@ function fakeTracer(spans: Array<Record<string, unknown>>) {
 }
 
 describe('withSpan', () => {
+  it('does not export the original exception message or stack', async () => {
+    const { tracer, span } = fakeTracer([]);
+    const error = new Error('Provider echoed private source code');
+    await expect(withSpan('test.private', {}, async () => { throw error; }, tracer as never))
+      .rejects.toBe(error);
+    const exported = JSON.stringify(span.recordException.mock.calls);
+    expect(exported).not.toContain('private source code');
+    expect(span.recordException).toHaveBeenCalledWith({ name: 'Error', message: 'Operation failed' });
+    expect(span.setStatus).toHaveBeenCalledWith({ code: 2, message: 'Operation failed' });
+  });
   it('runs the fn, sets attributes, and always ends the span', async () => {
     const ended: Array<Record<string, unknown>> = [];
     const { tracer, span } = fakeTracer(ended);

@@ -2,6 +2,19 @@ import { describe, expect, it } from 'vitest';
 import { sanitizeError, sanitizeTelemetryMetadata } from '../observability-sanitize';
 
 describe('sanitizeTelemetryMetadata', () => {
+  it('removes SDK content and raw exception attributes at the export boundary', () => {
+    const result = sanitizeTelemetryMetadata({
+      'ai.prompt.messages': '[{"content":"private repository code"}]',
+      'ai.response.text': 'private answer',
+      'exception.message': 'provider echoed private code',
+      'exception.stacktrace': 'private stack',
+      code_snippet: 'private code',
+      accessToken: 'opaque credential',
+      'ai.model.id': 'model',
+      'ai.usage.inputTokens': 123,
+    });
+    expect(result).toEqual({ 'ai.model.id': 'model', 'ai.usage.inputTokens': 123 });
+  });
   it('removes secret-bearing keys case-insensitively, keeps approved metadata', () => {
     const result = sanitizeTelemetryMetadata({
       authorization: 'Bearer secret',

@@ -1,3 +1,1 @@
-export function register() {
-  // Initialization logic goes here
-}
+export { register } from './src/instrumentation';

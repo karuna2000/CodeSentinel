@@ -1,4 +1,3 @@
-import { ensureOtel, markOtelRegistered } from '@/lib/tracing';
 
 /**
  * OpenTelemetry SDK registration (Phase F, Langfuse v4 path).
@@ -10,9 +9,10 @@ import { ensureOtel, markOtelRegistered } from '@/lib/tracing';
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME !== 'nodejs') return;
+  const { ensureOtel, markOtelRegistered } = await import('@/lib/tracing');
   const started = await ensureOtel();
   if (started) {
     markOtelRegistered();
-    console.log('[OTel] SDK registered, exporting spans to Langfuse');
+    console.log('[OTel] SDK registered');
   }
 }
