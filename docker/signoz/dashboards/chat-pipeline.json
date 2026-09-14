@@ -48,7 +48,7 @@
                           "filter": { "expression": "name = 'chat.answer'" },
                           "groupBy": [{ "name": "status.string" }],
                           "having": { "expression": "" },
-                          "orderBy": [{ "columnName": "count()", "order": "desc" }]
+                          "order": [{ "columnName": "count()", "order": "desc" }]
                         }
                       }
                     ]
@@ -88,7 +88,7 @@
                           "filter": { "expression": "name IN ('chat.classify','chat.retrieve','chat.generate','chat.gates','chat.judge')" },
                           "groupBy": [{ "name": "name" }],
                           "having": { "expression": "" },
-                          "orderBy": [{ "columnName": "p95(durationNano)/1000000", "order": "desc" }]
+                          "order": [{ "columnName": "p95(durationNano)/1000000", "order": "desc" }]
                         }
                       }
                     ]
@@ -127,7 +127,7 @@
                           "filter": { "expression": "name = 'chat.gates'" },
                           "groupBy": [],
                           "having": { "expression": "" },
-                          "orderBy": [{ "columnName": "count()", "order": "desc" }]
+                          "order": [{ "columnName": "count()", "order": "desc" }]
                         }
                       }
                     ]
