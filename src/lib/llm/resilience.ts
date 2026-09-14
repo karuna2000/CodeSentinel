@@ -15,8 +15,38 @@ const BASE_URL = 'https://integrate.api.nvidia.com/v1';
 const MAX_RETRIES = 3;
 const BASE_BACKOFF_MS = 1_000;
 
+/**
+ * Per-attempt ceiling. A hung provider once wedged a request for ~28 minutes;
+ * the race below aborts the WAIT (the orphaned fetch is ignored) so attempts
+ * fail fast into retry → fallback-model instead.
+ */
+export const MODEL_CALL_TIMEOUT_MS = 90_000;
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Race the model call against a ceiling; timeouts ride the retry path. */
+async function withTimeout<T>(
+  pending: T | Promise<T>,
+  timeoutMs: number,
+  label: string,
+  modelId: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      pending,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`[Resilience/${label}] ${modelId} exceeded ${timeoutMs}ms`)),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
 }
 
 function isRateLimited(error: unknown): boolean {
@@ -49,6 +79,7 @@ function createNvidiaProvider(): OpenAIProvider {
 export async function withResilience<T>(
   operation: (model: ReturnType<OpenAIProvider['chat']>) => T | Promise<T>,
   label: string = 'llm',
+  timeoutMs: number = MODEL_CALL_TIMEOUT_MS,
 ): Promise<T> {
   const provider = createNvidiaProvider();
 
@@ -58,7 +89,7 @@ export async function withResilience<T>(
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
-        return await operation(model);
+        return await withTimeout(operation(model), timeoutMs, label, modelId);
       } catch (error: unknown) {
         const isLastAttempt = attempt === MAX_RETRIES;
         const isLastModel = modelIdx === MODEL_FALLBACKS.length - 1;
