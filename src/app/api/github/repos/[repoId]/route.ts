@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { traceEvent } from '@/lib/observability';
+import { TelemetryEvent, eventContext } from '@/lib/observability-events';
 
 /**
  * DELETE /api/github/repos/[repoId] — removes a repository the user owns.
@@ -39,7 +40,7 @@ export async function DELETE(
     await tx.repository.delete({ where: { id: repoId, user_id: userId } });
   });
 
-  logger.info('[Repo Delete]', `Removed ${repo.owner}/${repo.name}`, { userId, repoId });
+  logger.info('[Repo Delete]', `Removed ${repo.owner}/${repo.name}`, eventContext(TelemetryEvent.RepositoryDeleted, { userId, repoId }));
   traceEvent('repository_removed', { userId, repoId, repo: `${repo.owner}/${repo.name}` });
 
   return NextResponse.json({ success: true });

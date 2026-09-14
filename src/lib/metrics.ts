@@ -119,3 +119,57 @@ export function recordChatLatency(seconds: number): void {
   chatLatencySeconds.observe(seconds);
   otelChatLatency.record(seconds);
 }
+
+// ── Indexing (spec §10.5) ───────────────────────────────────────────────────
+// Outcome-only labels: never repo/job ids (spec §28 cardinality rule).
+
+export const indexJobsTotal = new Counter({
+  name: 'codesintler_index_jobs_total',
+  help: 'Repository indexing runs by outcome',
+  labelNames: ['outcome'] as const,
+  registers: [registry],
+});
+
+export const indexDurationSeconds = new Histogram({
+  name: 'codesintler_index_duration_seconds',
+  help: 'Repository indexing wall duration',
+  buckets: [5, 15, 30, 60, 120, 300, 600],
+  labelNames: ['outcome'] as const,
+  registers: [registry],
+});
+
+export const indexFilesTotal = new Histogram({
+  name: 'codesintler_index_files',
+  help: 'Files present per indexing run',
+  buckets: [10, 50, 150, 300, 600, 1200],
+  labelNames: ['outcome'] as const,
+  registers: [registry],
+});
+
+const otelIndexJobs = otelMeter.createCounter('codesintler.index.jobs', {
+  description: 'Repository indexing runs by outcome',
+});
+const otelIndexDuration = otelMeter.createHistogram('codesintler.index.duration', {
+  description: 'Repository indexing wall duration in seconds',
+  unit: 's',
+});
+const otelIndexFiles = otelMeter.createHistogram('codesintler.index.files', {
+  description: 'Files present per indexing run',
+});
+
+export type IndexOutcome = 'success' | 'failure';
+
+export function recordIndexJob(outcome: IndexOutcome): void {
+  indexJobsTotal.inc({ outcome });
+  otelIndexJobs.add(1, { outcome });
+}
+
+export function recordIndexDuration(seconds: number, outcome: IndexOutcome): void {
+  indexDurationSeconds.observe({ outcome }, seconds);
+  otelIndexDuration.record(seconds, { outcome });
+}
+
+export function recordIndexFiles(fileCount: number, outcome: IndexOutcome): void {
+  indexFilesTotal.observe({ outcome }, fileCount);
+  otelIndexFiles.record(fileCount, { outcome });
+}

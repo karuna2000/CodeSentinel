@@ -28,6 +28,7 @@ import {
 } from '@/lib/metrics';
 import { withSpan } from '@/lib/tracing';
 import { sanitizeError } from '@/lib/observability-sanitize';
+import { TelemetryEvent } from '@/lib/observability-events';
 import { observabilityConfig } from '@/lib/observability-config';
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
@@ -335,6 +336,7 @@ export async function answerQuestion(opts: AnswerOptions): Promise<AnswerResult>
   }
 
   logger.info('[Chat]', 'answered', {
+    'event.name': TelemetryEvent.AgentQueryCompleted,
     userId: actorId,
     repoId,
     intent: classified.intent,

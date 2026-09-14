@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { traceEvent } from '@/lib/observability';
+import { TelemetryEvent, eventContext } from '@/lib/observability-events';
 import { checkRateLimit } from '@/lib/rate-limit';
 
 const MAX_BATCH_DELETE = 50;
@@ -76,10 +77,10 @@ export async function POST(request: Request) {
 
   const repo = owned[0];
   const names = owned.map((r) => `${r.owner}/${r.name}`).join(', ');
-  logger.info('[Repo Delete]', `Removed batch (${owned.length}): ${names}`, {
-    userId,
-    repoIds: ownedIds,
-  });
+  logger.info('[Repo Delete]', `Removed batch (${owned.length}): ${names}`, eventContext(
+    TelemetryEvent.RepositoryDeleted,
+    { userId, repoIds: ownedIds, count: owned.length },
+  ));
   traceEvent('repository_removed_batch', {
     userId,
     count: owned.length,

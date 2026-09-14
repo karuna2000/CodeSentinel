@@ -12,6 +12,7 @@ import { buildRateLimitedResponse } from '@/lib/security';
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { logger } from '@/lib/logger';
+import { TelemetryEvent } from '@/lib/observability-events';
 import { INPUT_LIMITS } from '@/config/app.config';
 
 export const maxDuration = 60;
@@ -99,7 +100,7 @@ export async function POST(
 
     return buildChatResponse(result.text, result.meta);
   } catch (error) {
-    logger.error('[Chat]', 'Chat request failed', { error: error instanceof Error ? error.message : String(error), repoId });
+    logger.error('[Chat]', 'Chat request failed', { 'event.name': TelemetryEvent.AgentQueryFailed, error: error instanceof Error ? error.message : String(error), repoId });
     return NextResponse.json(
       { error: 'There was a problem answering your question. Please try again.' },
       { status: 500 }

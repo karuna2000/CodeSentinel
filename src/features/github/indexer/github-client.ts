@@ -9,6 +9,13 @@ import { extractEdges } from '@/features/code-intelligence/edge-builder';
 import { generateEmbedding } from '@/features/context-engine/services/embedding-service';
 import { GraphNodeType, GraphEdgeType } from '@prisma/client';
 import { withSpan } from '@/lib/tracing';
+import { logger } from '@/lib/logger';
+import { TelemetryEvent, eventContext } from '@/lib/observability-events';
+import {
+  recordIndexDuration,
+  recordIndexFiles,
+  recordIndexJob,
+} from '@/lib/metrics';
 
 const MAX_EMBEDDING_CHARS = 2000; // keep within bge-small context (~512 tokens)
 
@@ -279,6 +286,59 @@ export async function indexRepository(
   // Root span for the indexing pipeline (spec §19) — children below.
   // Attributes are identifiers + counts only, never file contents.
   return withSpan('index.repository', { repoId: dbRepoId }, async (rootSpan) => {
+    const startedAt = Date.now();
+    logger.info(
+      '[Index]',
+      `Indexing started for ${owner}/${repo}`,
+      eventContext(TelemetryEvent.RepositoryIndexingStarted, { repoId: dbRepoId }),
+    );
+    try {
+      const result = await indexRepositoryInner(
+        installationId,
+        dbRepoId,
+        owner,
+        repo,
+        defaultBranch,
+        rootSpan.setAttributes.bind(rootSpan),
+      );
+      const durationS = (Date.now() - startedAt) / 1000;
+      recordIndexJob('success');
+      recordIndexDuration(durationS, 'success');
+      recordIndexFiles(result.fileCount, 'success');
+      logger.info(
+        '[Index]',
+        `Indexing completed for ${owner}/${repo}`,
+        eventContext(TelemetryEvent.RepositoryIndexingCompleted, {
+          repoId: dbRepoId,
+          fileCount: result.fileCount,
+          changed: result.changed,
+          durationS: Math.round(durationS),
+        }),
+      );
+      return result;
+    } catch (err) {
+      recordIndexJob('failure');
+      logger.error(
+        '[Index]',
+        `Indexing failed for ${owner}/${repo}`,
+        eventContext(TelemetryEvent.RepositoryIndexingFailed, {
+          repoId: dbRepoId,
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+      throw err;
+    }
+  });
+}
+
+async function indexRepositoryInner(
+  installationId: number,
+  dbRepoId: string,
+  owner: string,
+  repo: string,
+  defaultBranch: string,
+  setRootAttributes: (attrs: Record<string, string | number | boolean>) => void,
+) {
     const [rawTree, headCommitSha] = await withSpan(
       'index.fetch',
       { owner, repo, defaultBranch },
@@ -383,7 +443,7 @@ export async function indexRepository(
     // don't fail the entire indexing process if graph fails
   }
 
-  rootSpan.setAttributes({ fileCount: validFiles.length, commitSha: headCommitSha ?? '' });
+  setRootAttributes({ fileCount: validFiles.length, commitSha: headCommitSha ?? '' });
 
   return {
     fileCount: validFiles.length,
@@ -394,7 +454,6 @@ export async function indexRepository(
     commitSha: headCommitSha,
     lastSynced: now,
   };
-  });
 }
 
 /**

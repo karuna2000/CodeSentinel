@@ -5,11 +5,17 @@ import {
   chatLatencySeconds,
   ensureMetrics,
   guardrailBlocksTotal,
+  indexDurationSeconds,
+  indexFilesTotal,
+  indexJobsTotal,
   judgeVerdictsTotal,
   recordCacheEvent,
   recordChatAnswer,
   recordChatLatency,
   recordGuardrailBlock,
+  recordIndexDuration,
+  recordIndexFiles,
+  recordIndexJob,
   recordJudgeVerdict,
   registry,
 } from '../metrics';
@@ -55,5 +61,23 @@ describe('metrics registry', () => {
     expect(text).toMatch(/codesintler_judge_verdicts_total\{[^}]*pass="false"[^}]*\} 1/);
     expect(text).toMatch(/codesintler_chat_cache_events_total\{[^}]*result="miss"[^}]*\} 1/);
     expect(text).toMatch(/codesintler_chat_latency_seconds_count( ?\{[^}]*\})? 1/);
+  });
+
+  it('records indexing outcomes without identifier labels', async () => {
+    recordIndexJob('success');
+    recordIndexJob('failure');
+    recordIndexDuration(42, 'success');
+    recordIndexFiles(287, 'success');
+
+    const text = await ensureMetrics().metrics();
+    expect(text).toMatch(/codesintler_index_jobs_total\{[^}]*outcome="success"[^}]*\} 1/);
+    expect(text).toMatch(/codesintler_index_jobs_total\{[^}]*outcome="failure"[^}]*\} 1/);
+    expect(text).toMatch(/codesintler_index_duration_seconds_count\{[^}]*outcome="success"[^}]*\} 1/);
+    // Cardinality rule: no repo/job ids on metric lines.
+    const indexLines = text.split('\n').filter((l) => l.startsWith('codesintler_index_'));
+    expect(indexLines.join('\n')).not.toMatch(/repo_id|job_?id|user_id/);
+    expect(indexJobsTotal).toBeDefined();
+    expect(indexDurationSeconds).toBeDefined();
+    expect(indexFilesTotal).toBeDefined();
   });
 });

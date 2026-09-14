@@ -1,5 +1,12 @@
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { BatchSpanProcessor, type SpanProcessor } from '@opentelemetry/sdk-trace';
+import { resourceFromAttributes } from '@opentelemetry/resources';
+import {
+  ATTR_SERVICE_NAME,
+  ATTR_SERVICE_NAMESPACE,
+  ATTR_SERVICE_VERSION,
+  ATTR_DEPLOYMENT_ENVIRONMENT_NAME,
+} from '@opentelemetry/semantic-conventions';
 import { SanitizingSpanProcessor } from './telemetry-processor';
 import { observabilityConfig } from './observability-config';
 
@@ -46,7 +53,12 @@ export async function createTelemetrySDK(config = observabilityConfig()) {
     });
   }
   return new NodeSDK({
-    serviceName: config.serviceName,
+    resource: resourceFromAttributes({
+      [ATTR_SERVICE_NAME]: config.serviceName,
+      [ATTR_SERVICE_NAMESPACE]: config.serviceNamespace,
+      [ATTR_SERVICE_VERSION]: config.serviceVersion,
+      [ATTR_DEPLOYMENT_ENVIRONMENT_NAME]: config.environment,
+    }),
     // Explicit empty lists prevent ambient SDK defaults from creating unsanitized sinks.
     spanProcessors: processors,
     logRecordProcessors: logRecordProcessor ? [logRecordProcessor] : [],

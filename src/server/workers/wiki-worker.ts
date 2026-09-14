@@ -3,6 +3,7 @@ import type { GenerationJob, Prisma } from '@prisma/client';
 import { generateWikiPages } from '@/features/wiki/services/module-summarizer';
 import { generateFlowchart } from '@/features/wiki/services/mermaid-generator';
 import { traceEvent } from '@/lib/observability';
+import { TelemetryEvent, eventContext } from '@/lib/observability-events';
 import { withSpan } from '@/lib/tracing';
 import { logger } from '@/lib/logger';
 import { recordUsage, checkUsageBudget } from '@/lib/llm/metering';
@@ -131,9 +132,18 @@ export async function runWikiJob(jobId: string): Promise<void> {
       wikiCount,
       timeTakenMs: Date.now() - start,
     });
+    logger.info(
+      '[WikiWorker]',
+      `Job ${jobId} succeeded`,
+      eventContext(TelemetryEvent.RepositoryWikiCompleted, {
+        repoId: job.repo_id,
+        wikiCount,
+        timeTakenMs: Date.now() - start,
+      }),
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    logger.error('[WikiWorker]', `Job ${jobId} failed`, { error: message, repoId: job.repo_id });
+    logger.error('[WikiWorker]', `Job ${jobId} failed`, eventContext(TelemetryEvent.RepositoryWikiFailed, { error: message, repoId: job.repo_id }));
     await db.generationJob.update({
       where: { id: jobId },
       data: {

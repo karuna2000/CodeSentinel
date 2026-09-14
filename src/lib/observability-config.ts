@@ -16,6 +16,8 @@ export function observabilityConfig(source: Record<string, string | undefined> =
     enabled,
     environment: source.APP_ENV || source.NODE_ENV || 'development',
     serviceName: source.OTEL_SERVICE_NAME || 'codesentinel-api',
+    serviceNamespace: 'codesentinel',
+    serviceVersion: source.SERVICE_VERSION || 'dev',
     captureContent,
     capturePrompts: captureContent && source.OBS_CAPTURE_PROMPTS === 'true',
     captureCompletions: captureContent && source.OBS_CAPTURE_COMPLETIONS === 'true',
