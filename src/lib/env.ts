@@ -39,6 +39,15 @@ export const env = {
     // across review, chat and intent detection. 0/absent disables the cap.
     dailyTokenCap: Number(process.env.LLM_BUDGET_DAILY_TOKENS) || 0,
   },
+  demo: {
+    // Optional. Comma-separated repository ids served anonymously at /demo.
+    // Empty = demo disabled (page + API return 404). Only allowlisted repos
+    // are ever readable without a session; no write endpoints exist in scope.
+    repoIds: (process.env.DEMO_REPO_IDS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  },
   nextAuth: {
     secret: requireEnv('NEXTAUTH_SECRET'),
     url: process.env.NEXTAUTH_URL ?? 'http://localhost:3000',

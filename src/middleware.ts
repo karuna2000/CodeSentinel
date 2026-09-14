@@ -9,8 +9,9 @@ const AUTH_PATHS = [
 ];
 
 const PUBLIC_PATHS: string[] = [
-  
-  
+  // Anonymous demo (allowlist-scoped at the route level — see DEMO_REPO_IDS).
+  '/demo',
+  '/api/demo',
 ];
 
 const NEXTAUTH_PATHS = [
