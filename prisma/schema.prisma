@@ -258,3 +258,21 @@ model ChatHistory {
   @@index([user_id, repo_id, created_at])
   @@map("chat_history")
 }
+
+// ── Observability Sink (Phase B0) ───────────────────────────────────────────
+// Durable local store for traceEvent. Langfuse stays as the optional cloud
+// mirror; this table is the queryable source for /admin/observability.
+// Fire-and-forget writes only — tracing must never fail a request.
+
+model TraceEvent {
+  id         String   @id @default(uuid())
+  name       String
+  metadata   Json?
+  user_id    String?
+  repo_id    String?
+  created_at DateTime @default(now())
+
+  @@index([name, created_at])
+  @@index([repo_id, created_at])
+  @@map("trace_events")
+}
