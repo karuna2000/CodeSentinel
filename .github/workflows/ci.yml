@@ -93,3 +93,46 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+
+  evals:
+    name: Retrieval evals (report only)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres?schema=public
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run db:migrate
+      # Skips gracefully without a fixture: retrieval evals need EVAL_REPO_ID
+      # pointing at an indexed repo (plus NVIDIA_API_KEY for chat/wiki evals).
+      # Set both as repo secrets to activate; failures never block the PR.
+      - name: Run evals when a fixture is configured
+        env:
+          EVAL_REPO_ID: ${{ secrets.EVAL_REPO_ID }}
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+        run: |
+          if [ -z "$EVAL_REPO_ID" ]; then
+            echo "EVAL_REPO_ID not set; skipping scored evals."
+            exit 0
+          fi
+          npm run eval
