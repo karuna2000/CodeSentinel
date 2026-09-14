@@ -112,7 +112,7 @@ export default async function DashboardLayout({
     <WorkspaceView
       initialRepositories={repositories}
       installUrl={installUrl}
-      username={session.user.name || session.user.email || undefined}
+      username={session.user.githubLogin || session.user.name || session.user.email || undefined}
       databaseUnavailable={databaseUnavailable}
     >
       {children}

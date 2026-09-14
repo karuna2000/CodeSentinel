@@ -47,12 +47,23 @@ export const authOptions: NextAuthOptions = {
           refreshToken: account.refresh_token,
           githubLogin: readGithubLogin(profile) ?? token.githubLogin,
           githubLoginAttempted: Boolean(readGithubLogin(profile) ?? token.githubLogin),
+          githubLoginAttemptedAt: Date.now(),
         };
       }
 
-      if (!token.githubLogin && !token.githubLoginAttempted && token.accessToken) {
+      // Negative lookups are cached for a day so one bad network day doesn't
+      // pin the handle to undefined for the whole 30-day JWT lifetime.
+      const attemptStale =
+        token.githubLoginAttemptedAt != null &&
+        Date.now() - token.githubLoginAttemptedAt > 24 * 3600 * 1000;
+      if (
+        !token.githubLogin &&
+        (!token.githubLoginAttempted || attemptStale) &&
+        token.accessToken
+      ) {
         token.githubLogin = await fetchGithubLogin(token.accessToken);
         token.githubLoginAttempted = true;
+        token.githubLoginAttemptedAt = Date.now();
       }
 
       if (token.accessTokenExpires && Date.now() < token.accessTokenExpires) {

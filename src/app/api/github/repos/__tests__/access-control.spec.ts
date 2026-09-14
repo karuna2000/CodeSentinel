@@ -238,6 +238,11 @@ describe('GET /api/github/repos/[repoId]/chat/evidence', () => {
 describe('POST /api/github/repos/delete-batch', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.checkRateLimit.mockResolvedValue({
+      allowed: true,
+      remaining: 9,
+      retryAfterMs: 0,
+    });
   });
 
   it('deletes only owned ids inside a transaction', async () => {
@@ -288,6 +293,27 @@ describe('POST /api/github/repos/delete-batch', () => {
     );
 
     expect(res.status).toBe(404);
+    expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
+  it('returns 429 when rate limited without touching the database', async () => {
+    asUser('user-a');
+    mocks.checkRateLimit.mockResolvedValue({
+      allowed: false,
+      remaining: 0,
+      retryAfterMs: 60_000,
+    });
+
+    const res = await deleteBatch(
+      new Request('http://localhost/api/github/repos/delete-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repoIds: ['owned-1'] }),
+      }),
+    );
+
+    expect(res.status).toBe(429);
+    expect(mocks.findMany).not.toHaveBeenCalled();
     expect(mocks.transaction).not.toHaveBeenCalled();
   });
 });

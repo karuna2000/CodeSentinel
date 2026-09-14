@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
 import { traceEvent } from '@/lib/observability';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 const MAX_BATCH_DELETE = 50;
 
@@ -21,6 +22,17 @@ export async function POST(request: Request) {
   }
 
   const userId = session.user.id;
+
+  const { allowed } = await checkRateLimit(`delete-batch:${userId}`, {
+    windowMs: 60_000,
+    maxRequests: 10,
+  });
+  if (!allowed) {
+    return NextResponse.json(
+      { error: 'Rate limit exceeded. Please wait a moment.' },
+      { status: 429 },
+    );
+  }
 
   let repoIds: unknown;
   try {

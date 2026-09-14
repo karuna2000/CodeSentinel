@@ -48,6 +48,7 @@ const HOP2_WEIGHT_THRESHOLD = 2; // only expand strong hop-1 neighbors
 const EDGE_TYPE_WEIGHTS: Record<string, number> = {
   IMPORTS: 3,
   CALLS: 2,
+  INHERITS: 2,
   READS_STORE: 2,
   FETCHES_ROUTE: 1,
 };
@@ -178,6 +179,8 @@ export async function retrieveContext(
         type: { in: relations ?? WEIGHTED_EDGE_TYPES },
         OR: [{ source_node_id: { in: seedArr } }, { target_node_id: { in: seedArr } }],
       },
+      // Deterministic cap: on dense seeds truncation favors alphabetically
+      // earlier types (CALLS, FETCHES_ROUTE) over IMPORTS/READS_STORE.
       orderBy: [{ type: 'asc' }, { id: 'asc' }],
       take: MAX_TRAVERSAL_EDGES,
     });

@@ -30,15 +30,36 @@ export interface ChatMeta {
 
 const STREAM_ERROR_SENTINEL = '[__STREAM_ERROR__]';
 
+const KNOWN_INTENTS: ReadonlySet<string> = new Set([
+  'locate',
+  'explain',
+  'trace_flow',
+  'architecture',
+  'dependency',
+  'impact',
+  'debug',
+  'compare',
+]);
+
+const KNOWN_STATUSES: ReadonlySet<string> = new Set([
+  'grounded',
+  'limited_evidence',
+  'not_found',
+]);
+
 /** Parse the base64 `x-chat-meta` response header into a typed payload. */
 export function parseChatMeta(res: Response): ChatMeta | null {
   const header = res.headers.get('x-chat-meta');
   if (!header) return null;
   try {
     const raw = JSON.parse(atob(header)) as Partial<ChatMeta>;
+    const intent: ChatIntentClient =
+      raw.intent && KNOWN_INTENTS.has(raw.intent) ? raw.intent : 'explain';
+    const status: AnswerStatusClient =
+      raw.status && KNOWN_STATUSES.has(raw.status) ? raw.status : 'grounded';
     return {
-      intent: raw.intent ?? 'explain',
-      status: raw.status ?? 'grounded',
+      intent,
+      status,
       evidence: Array.isArray(raw.evidence) ? raw.evidence : [],
       followUps: Array.isArray(raw.followUps) ? raw.followUps : [],
       stats: raw.stats ?? { lexicalHits: 0, semanticHits: 0, graphExpanded: 0 },

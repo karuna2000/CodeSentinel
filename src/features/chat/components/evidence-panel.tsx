@@ -96,9 +96,9 @@ export function EvidencePanel({ repoId, meta, onPickFollowUp }: EvidencePanelPro
                   Keep exploring
                 </p>
                 <div className="space-y-1.5">
-                  {meta.followUps.map((q) => (
+                  {meta.followUps.map((q, i) => (
                     <button
-                      key={q}
+                      key={`${q}-${i}`}
                       onClick={() => onPickFollowUp(q)}
                       className="w-full flex items-start gap-2 text-left px-3 py-2 rounded-lg bg-white/60 border border-[#e4e4e7] hover:border-[var(--brand-green)]/40 hover:bg-white transition-colors text-[12.5px] text-[var(--brand-ink)]"
                     >

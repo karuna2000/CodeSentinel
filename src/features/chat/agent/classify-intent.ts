@@ -69,7 +69,10 @@ const HINTS: Hint[] = [
   },
   {
     intent: 'explain',
-    patterns: [/what does/i, /explain/i, /what is/i, /what (did|do|are) (this|that|these|those)/i, /describe/i, /how does .* (work|behave)/i, /what does .* (do|return|produce)/i, /what's this/i, /can you (tell|explain|walk) me about/i, /what is the purpose/i, /meaning of/i],
+    // Note: "how does X work" is intentionally NOT here — it matches the
+    // trace_flow table above first and is remapped there, so the plan follows
+    // the execution path instead of explaining a symbol at rest.
+    patterns: [/what does/i, /explain/i, /what is/i, /what (did|do|are) (this|that|these|those)/i, /describe/i, /what does .* (do|return|produce)/i, /what's this/i, /can you (tell|explain|walk) me about/i, /what is the purpose/i, /meaning of/i],
   },
 ];
 
@@ -77,7 +80,7 @@ const STOPWORDS = new Set([
   'the', 'a', 'an', 'is', 'are', 'was', 'were', 'does', 'do', 'did', 'how', 'what',
   'where', 'which', 'who', 'why', 'when', 'this', 'that', 'these', 'those', 'of',
   'in', 'on', 'at', 'to', 'for', 'with', 'and', 'or', 'but', 'not', 'can', 'could',
-  'would', 'should', 'will', 'explain', 'explain', 'tell', 'show', 'work', 'works',
+  'would', 'should', 'will', 'explain', 'tell', 'show', 'work', 'works',
   'working', 'code', 'codebase', 'repository', 'repo', 'i', 'me', 'you', 'it', 'implementation',
 ]);
 

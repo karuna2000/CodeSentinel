@@ -26,6 +26,8 @@ declare module 'next-auth/jwt' {
     refreshToken?: string;
     githubLogin?: string;
     githubLoginAttempted?: boolean;
+    /** Timestamp (ms) of the last GitHub login lookup, for negative-cache expiry. */
+    githubLoginAttemptedAt?: number;
     error?: 'RefreshAccessTokenError';
   }
 }

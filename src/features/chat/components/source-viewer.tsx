@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X, FileCode, Loader2, Clipboard, Check } from 'lucide-react';
 
 interface SourceViewerProps {
@@ -25,6 +25,13 @@ export function SourceViewer({ repoId, nodeId, label, onClose }: SourceViewerPro
   const [data, setData] = useState<EvidencePayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!nodeId) return;
@@ -116,7 +123,8 @@ export function SourceViewer({ repoId, nodeId, label, onClose }: SourceViewerPro
                       onClick={() => {
                         void navigator.clipboard.writeText(data.codeSnippet ?? '');
                         setCopied(true);
-                        setTimeout(() => setCopied(false), 2000);
+                        if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
+                        copyTimerRef.current = window.setTimeout(() => setCopied(false), 2000);
                       }}
                       className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs text-[#f4f4f5]/70 hover:text-white hover:bg-white/10 transition-colors"
                       aria-label="Copy code"

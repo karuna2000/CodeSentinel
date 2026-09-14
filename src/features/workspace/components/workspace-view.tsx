@@ -151,6 +151,9 @@ export default function WorkspaceView({
   const params = useParams<{ repoId?: string }>();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [previousInitial, setPreviousInitial] = useState(initialRepositories);
+  // Adjust-state-during-render: sanctioned React pattern for derived state
+  // (converges immediately — the condition is false on the re-render).
+  // Kept out of useEffect to satisfy react-hooks/set-state-in-effect.
   if (previousInitial !== initialRepositories) {
     setPreviousInitial(initialRepositories);
     setRepositories(initialRepositories);
